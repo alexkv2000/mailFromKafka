@@ -28,7 +28,7 @@ public class App {
            // sbName.append("test").append(i);
             JSONObject msg = new JSONObject();
             msg.put("To", "KvochkinAY@itsnn.ru");
-            msg.put("ToСС", "AlexKv2000@mail.ru");
+           // msg.put("ToСС", "AlexKv2000@mail.ru");
             msg.put("Caption", String.format("%s %d: %s ", "Потоков 20: Тема сообщения ", i,  now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             msg.put("Body", String.format("%s : %d %s","Тело сообщения", i, "сообщение"));
             // Создание массива URLS

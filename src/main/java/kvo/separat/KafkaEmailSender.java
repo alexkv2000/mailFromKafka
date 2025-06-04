@@ -24,8 +24,10 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.net.ssl.SSLSocketFactory;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 public class KafkaEmailSender {
+    private static final Logger logger = LoggerFactory.getLogger(KafkaEmailSender.class);
     static ConfigLoader configLoader;
 
     static {
@@ -56,7 +58,7 @@ public class KafkaEmailSender {
         consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-
+        logger.info("Starting Kafka source ...");
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {
             consumer.subscribe(Collections.singletonList(TOPIC));
             ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
@@ -68,6 +70,7 @@ public class KafkaEmailSender {
                         try {
                             processMessage(record.value());
                         } catch (IOException e) {
+                            logger.error("An error 'processMessage' ", e);
                             throw new RuntimeException(e);
                         }
                     });
@@ -91,6 +94,7 @@ public class KafkaEmailSender {
 
         // Проход по массиву URLS и загрузка файлов
         StringBuilder filePaths = new StringBuilder();
+        logger.info("Starting download Files ...");
         for (int i = 0; i < urls.length(); i++) {
             String url = urls.getString(i);
             String filePath = downloadFile(url, uuid);
@@ -102,15 +106,21 @@ public class KafkaEmailSender {
                 filePaths.append(filePath);
             }
         }
+        logger.info("Stop download Files ...");
 
+        logger.info("Starting send Email ...");
         // Отправка сообщения по электронной почте
         sendEmail(to, toCC, caption, body, filePaths.toString());
+        logger.info("Stop send Email ...");
 
+        logger.info("Starting delete Directory Temp...");
         // Удаление файлов из tmp
         if (filePaths.length() > 0) {
             deleteDirectory(Path.of(FILE_PATH + uuid));
-            System.out.println("Каталог успешно удалён: " + FILE_PATH + uuid);
+            logger.info("Directory deleted access ..." + FILE_PATH + uuid);
+            //System.out.println("Каталог успешно удалён: " + FILE_PATH + uuid);
         }
+        logger.info("Stop delete Directory Temp ...");
     }
 
     private static String downloadFile(String fileUrl, UUID uuid) {
@@ -136,15 +146,18 @@ public class KafkaEmailSender {
                     try (InputStream in = httpConn.getInputStream()) {
                         // Копирование файла
                         Files.copy(in, Paths.get(fullPath), StandardCopyOption.REPLACE_EXISTING);
-                        System.out.println("Файл успешно скачан: " + fullPath);
+                        logger.info("File downloaded access"+ fullPath);
+                        //System.out.println("Файл успешно скачан: " + fullPath);
                         return fullPath;
                     }
                 } else {
-                    System.out.println("Ошибка ответа от сервера закачки файлов: " + httpConn.getResponseCode());
+                    logger.warn("An error 'downloadFile' " + httpConn.getResponseCode());
+                    //System.out.println("Ошибка ответа от сервера закачки файлов: " + httpConn.getResponseCode());
                 }
                 // Закрытие соединения
                 httpConn.disconnect();
             } catch (IOException e) {
+                logger.error("An error 'downloadFile' ", e);
                 e.printStackTrace();
             }
 
@@ -152,6 +165,7 @@ public class KafkaEmailSender {
                 try {
                     Thread.sleep(1000); // Задержка на 1 секунду
                 } catch (InterruptedException e) {
+                    logger.error("An error 'downloadFile' stopping wait", e);
                     System.err.println("Ошибка при задержке: " + e.getMessage());
                 }
             }
@@ -177,6 +191,7 @@ public class KafkaEmailSender {
             props.put("mail.smtp.ssl.socketFactory", sslSocketFactory);
 
         } catch (Exception e) {
+            logger.error("An error 'sendEmail' create SSLContext ", e);
             e.printStackTrace();
         }
 
@@ -217,22 +232,26 @@ public class KafkaEmailSender {
             while (num_attempts != 0) {
                 try {
                     Transport.send(message);
-                    System.out.printf("Email sent successfully to %s, copy %s ", to, toCC);
+                    logger.info("Email sent successfully");
+                    //System.out.printf("Email sent successfully to %s, copy %s ", to, toCC);
                     break;
                 } catch (Exception ee) {
                     ee.printStackTrace();
-                    System.out.printf("Email sent error to %s, copy %s ", to, toCC);
+                    logger.error("An error 'sendEmail' To or ToCC", ee);
+                    //System.out.printf("Email sent error to %s, copy %s ", to, toCC);
                 }
                 // Задержка на 1 секунду (1000 миллисекунд)
                 try {
                     Thread.sleep(1000);
                 } catch (InterruptedException e) {
+                    logger.error("An error 'downloadFile' stopping wait", e);
                     e.printStackTrace();
                 }
                 num_attempts--;
 
             }
         } catch (Exception e) {
+            logger.error("An error 'sendEmail' Transport.send(message) ", e);
             e.printStackTrace();
         }
 
@@ -244,8 +263,10 @@ public class KafkaEmailSender {
                 .forEach(p -> {
                     try {
                         Files.delete(p);
+                        logger.info("File delete access"+ p);
                     } catch (IOException e) {
-                        System.err.println("Ошибка при удалении: " + p + " - " + e.getMessage());
+                        logger.error("An error 'deleteDirectory' ", e);
+                        //System.err.println("Ошибка при удалении: " + p + " - " + e.getMessage());
                     }
                 });
     }
