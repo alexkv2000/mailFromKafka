@@ -1,0 +1,9 @@
+TOPIC=test-topic
+BROKER=doc-test:9092
+GROUP_ID=consumer-java-sender
+EMAIL=DVWorkflow@gaz.ru
+PASSWORD=!_Dwkflw17
+SMTP_SERVER=email.itsnn.ru
+FILE_PATH=c:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\
+NUM_THREADS=20
+NUM_ATTEMPT=5
