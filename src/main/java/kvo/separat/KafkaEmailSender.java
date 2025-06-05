@@ -65,7 +65,8 @@ public class KafkaEmailSender {
             while (true) {
                 var records = consumer.poll(Duration.ofMillis(100));
                 for (ConsumerRecord<String, String> record : records) {
-                    System.out.println(records.toString());
+                    logger.info(records.toString());
+                    //System.out.println(records.toString());
                     executor.submit(() -> {
                         try {
                             processMessage(record.value());
@@ -79,7 +80,7 @@ public class KafkaEmailSender {
         }
     }
 
-    private static void processMessage(String message) throws IOException {
+    static void processMessage(String message) throws IOException {
         JSONObject jsonMessage = new JSONObject(message);
         String to = jsonMessage.optString("To", "");
         String toCC = jsonMessage.optString("ToСС", "");
@@ -123,7 +124,7 @@ public class KafkaEmailSender {
         logger.info("Stop delete Directory Temp ...");
     }
 
-    private static String downloadFile(String fileUrl, UUID uuid) {
+    static String downloadFile(String fileUrl, UUID uuid) {
         String fileName = ""; // Имя файла
         String fullPath = "";
         int attempts = NUM_ATTEMPT;
@@ -151,7 +152,7 @@ public class KafkaEmailSender {
                         return fullPath;
                     }
                 } else {
-                    logger.warn("An error 'downloadFile' " + httpConn.getResponseCode());
+                    logger.error("An error 'downloadFile' " + httpConn.getResponseCode());
                     //System.out.println("Ошибка ответа от сервера закачки файлов: " + httpConn.getResponseCode());
                 }
                 // Закрытие соединения
@@ -173,7 +174,7 @@ public class KafkaEmailSender {
         return fullPath;
     }
 
-    private static void sendEmail(String to, String toCC, String caption, String body, String filePaths) {
+    static void sendEmail(String to, String toCC, String caption, String body, String filePaths) {
         Properties props = new Properties();
         props.put("mail.smtp.auth", "true");
         props.put("mail.smtp.starttls.enable", "true");
@@ -196,11 +197,7 @@ public class KafkaEmailSender {
         }
 
         // Получение сеанса
-        Session session = Session.getInstance(props, new javax.mail.Authenticator() {
-            protected PasswordAuthentication getPasswordAuthentication() {
-                return new PasswordAuthentication(EMAIL, PASSWORD);
-            }
-        });
+        Session session = setSession(Session.getInstance(props));
 
         try {
             Message message = new MimeMessage(session);
@@ -257,7 +254,16 @@ public class KafkaEmailSender {
 
     }
 
-    private static void deleteDirectory(Path path) throws IOException {
+    static Session setSession(Session props) {
+        Session session = Session.getInstance(props.getProperties(), new Authenticator() {
+            protected PasswordAuthentication getPasswordAuthentication() {
+                return new PasswordAuthentication(EMAIL, PASSWORD);
+            }
+        });
+        return session;
+    }
+
+    static void deleteDirectory(Path path) throws IOException {
         // Используем Files.walkFileTree для рекурсивного удаления
         Files.walk(path).sorted((a, b) -> b.compareTo(a)) // Сортируем в обратном порядке для удаления файлов перед каталогами
                 .forEach(p -> {
@@ -270,4 +276,5 @@ public class KafkaEmailSender {
                     }
                 });
     }
+
 }
