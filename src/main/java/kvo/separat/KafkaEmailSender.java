@@ -131,7 +131,7 @@ public class KafkaEmailSender {
         // Удаление файлов из tmp
         if (filePaths.length() > 0) {
             deleteDirectory(Path.of(FILE_PATH + uuid));
-            logger.info("Directory deleted access ..." + FILE_PATH + uuid);
+            logger.info("Directory deleted access ... " + FILE_PATH + uuid);
             //System.out.println("Каталог успешно удалён: " + FILE_PATH + uuid);
         }
         logger.info("Stop delete Directory Temp ...");
@@ -160,7 +160,7 @@ public class KafkaEmailSender {
                     try (InputStream in = httpConn.getInputStream()) {
                         // Копирование файла
                         Files.copy(in, Paths.get(fullPath), StandardCopyOption.REPLACE_EXISTING);
-                        logger.info("File downloaded access"+ fullPath);
+                        logger.info("File downloaded access "+ fullPath);
                         //System.out.println("Файл успешно скачан: " + fullPath);
                         return fullPath;
                     }
@@ -179,7 +179,7 @@ public class KafkaEmailSender {
                 try {
                     Thread.sleep(1000); // Задержка на 1 секунду
                 } catch (InterruptedException e) {
-                    logger.error("An error 'downloadFile' stopping wait", e);
+                    logger.error("An error 'downloadFile' stopping wait ", e);
                     System.err.println("Ошибка при задержке: " + e.getMessage());
                 }
             }
@@ -282,7 +282,7 @@ public class KafkaEmailSender {
                 .forEach(p -> {
                     try {
                         Files.delete(p);
-                        logger.info("File delete access"+ p);
+                        logger.info("File delete access "+ p);
                     } catch (IOException e) {
                         logger.error("An error 'deleteDirectory' ", e);
                         //System.err.println("Ошибка при удалении: " + p + " - " + e.getMessage());
