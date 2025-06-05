@@ -18,7 +18,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
-public class KafkaEmailSenderTest {
+public class KafkaEmailSenderTest extends KafkaEmailSender{
     static ConfigLoader configLoader;
     //   private KafkaEmailSender kafkaEmailSender;
     static {

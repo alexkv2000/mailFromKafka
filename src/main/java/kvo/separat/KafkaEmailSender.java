@@ -18,6 +18,8 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.Date;
+import java.text.SimpleDateFormat;
 import java.util.Properties;
 import javax.net.ssl.*;
 import java.util.UUID;
@@ -26,6 +28,9 @@ import java.util.concurrent.Executors;
 import javax.net.ssl.SSLSocketFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.kafka.common.utils.Utils.sleep;
+
 public class KafkaEmailSender {
     private static final Logger logger = LoggerFactory.getLogger(KafkaEmailSender.class);
     static ConfigLoader configLoader;
@@ -37,9 +42,6 @@ public class KafkaEmailSender {
             throw new RuntimeException(e);
         }
     }
-
-
-    // Пример использования
     private static final String TOPIC = configLoader.getProperty("TOPIC");
     private static final String BROKER = configLoader.getProperty("BROKER");
     private static final String GROUP_ID = configLoader.getProperty("GROUP_ID");
@@ -63,6 +65,11 @@ public class KafkaEmailSender {
             consumer.subscribe(Collections.singletonList(TOPIC));
             ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
             while (true) {
+//                Date now = new Date();
+//                SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+//                String formattedDate = sdf.format(now);
+//                logger.info(formattedDate);
+
                 var records = consumer.poll(Duration.ofMillis(100));
                 for (ConsumerRecord<String, String> record : records) {
                     logger.info(records.toString());
@@ -75,6 +82,12 @@ public class KafkaEmailSender {
                             throw new RuntimeException(e);
                         }
                     });
+                }
+                try {
+                    sleep(1000); // Задержка на 1 секунду
+                } catch (Exception e) {
+                    logger.error("An error 'main' stopping wait", e);
+                    System.err.println("Ошибка при задержке: " + e.getMessage());
                 }
             }
         }
