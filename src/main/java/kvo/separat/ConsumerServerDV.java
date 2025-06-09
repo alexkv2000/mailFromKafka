@@ -5,9 +5,16 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.mail.*;
-import javax.mail.internet.*;
+import javax.mail.internet.InternetAddress;
+import javax.mail.internet.MimeBodyPart;
+import javax.mail.internet.MimeMessage;
+import javax.mail.internet.MimeMultipart;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -16,23 +23,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.sql.*;
 import java.time.Duration;
 import java.util.Collections;
-import java.util.Date;
-import java.text.SimpleDateFormat;
 import java.util.Properties;
-import javax.net.ssl.*;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import javax.net.ssl.SSLSocketFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import static org.apache.kafka.common.utils.Utils.sleep;
+import static java.lang.Thread.sleep;
 
-public class KafkaEmailSender {
-    private static final Logger logger = LoggerFactory.getLogger(KafkaEmailSender.class);
+public class ConsumerServerDV {
+
+    private static final Logger logger = LoggerFactory.getLogger(ConsumerServerDV.class);
     static ConfigLoader configLoader;
 
     static {
@@ -42,6 +45,7 @@ public class KafkaEmailSender {
             throw new RuntimeException(e);
         }
     }
+
     private static final String TOPIC = configLoader.getProperty("TOPIC");
     private static final String BROKER = configLoader.getProperty("BROKER");
     private static final String GROUP_ID = configLoader.getProperty("GROUP_ID");
@@ -51,49 +55,90 @@ public class KafkaEmailSender {
     private static final String FILE_PATH = configLoader.getProperty("FILE_PATH");
     private static final int NUM_THREADS = Integer.parseInt(configLoader.getProperty("NUM_THREADS"));
     private static final int NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
+    private static final String LIMIT_SELECT = configLoader.getProperty("LIMITSELECT");
 
-    public static void main(String[] args) {
-
-        // Настройки для подключения к Kafka Consumer
+    public static void main(String[] args) throws SQLException {
         Properties consumerProps = new Properties();
         consumerProps.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, BROKER);
         consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, GROUP_ID);
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        logger.info("Starting Kafka source ...");
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {
-            consumer.subscribe(Collections.singletonList(TOPIC));
-            ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
-            while (true) {
-//                Date now = new Date();
-//                SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
-//                String formattedDate = sdf.format(now);
-//                logger.info(formattedDate);
+        logger.info("Start Kafka source ...");
 
-                var records = consumer.poll(Duration.ofMillis(100));
-                for (ConsumerRecord<String, String> record : records) {
-                    logger.info(records.toString());
-                    //System.out.println(records.toString());
-                    executor.submit(() -> {
-                        try {
-                            processMessage(record.value());
-                        } catch (IOException e) {
-                            logger.error("An error 'processMessage' ", e);
-                            throw new RuntimeException(e);
+        try (Connection connection = DriverManager.getConnection("jdbc:sqlite:D:/DataBase/sql_kafka.s3db")) {
+            String createTableSQL = "CREATE TABLE IF NOT EXISTS messages (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "kafka_topic TEXT NOT NULL," +
+                    "message TEXT NOT NULL," +
+                    "date_create TIMESTAMP NOT NULL," +
+                    "status TEXT DEFAULT NULL," +
+                    "date_end TIMESTAMP DEFAULT NULL" +
+                    ");";
+            try (PreparedStatement preparedStatement = connection.prepareStatement(createTableSQL)) {
+                preparedStatement.executeUpdate();
+            }
+
+            String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create) VALUES (?, ?, ?)";
+
+            try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {
+                consumer.subscribe(Collections.singletonList(TOPIC));
+                ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
+                while (true) {
+                    var records = consumer.poll(Duration.ofMillis(100));
+                    // --> Добавление в БД новые сообщения
+                    for (ConsumerRecord<String, String> record : records) {
+                        try (PreparedStatement preparedStatement = connection.prepareStatement(insertSQL)) {
+                            preparedStatement.setString(1, record.topic());
+                            preparedStatement.setString(2, record.value());
+                            preparedStatement.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
+                            preparedStatement.executeUpdate();
+                        } catch (Exception e) {
+                            logger.error("Error processing Insert DB", e);
                         }
-                    });
-                }
-                try {
-                    sleep(1000); // Задержка на 1 секунду
-                } catch (Exception e) {
-                    logger.error("An error 'main' stopping wait", e);
-                    System.err.println("Ошибка при задержке: " + e.getMessage());
+
+                    }
+                    // <-- Добавление в БД новые сообщения
+
+                    // --> Отправка сообщений (по 200 штук)
+                    String selectSQL = "SELECT * FROM messages WHERE status IS NULL AND kafka_topic = ? LIMIT ?";
+                    try (PreparedStatement preparedStatement = connection.prepareStatement(selectSQL)) {
+                        preparedStatement.setString(1, TOPIC);
+                        preparedStatement.setString(2, LIMIT_SELECT);
+                        ResultSet resultSet = preparedStatement.executeQuery();
+                        while (resultSet.next()) {
+                            String msg = resultSet.getString("message");
+                            executor.submit(() -> {
+                                try {
+                                    sendMessage(msg); // --> Отправить сообщение
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            });
+
+                            ChangeStatusMess(connection, resultSet); // --> Обновление статуса и времени отправки
+                            try {
+                                sleep(1000);
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    static void processMessage(String message) throws IOException {
+    private static void ChangeStatusMess(Connection connection, ResultSet resultSet) throws SQLException {
+        String updateSQL = "UPDATE messages SET status = ?, date_end = ? WHERE id = ?";
+        try (PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
+            updateStatement.setString(1, "send");
+            updateStatement.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+            updateStatement.setInt(3, resultSet.getInt("id"));
+            updateStatement.executeUpdate();
+        }
+    }
+
+    private static void sendMessage(String message) throws IOException {
         JSONObject jsonMessage = new JSONObject(message);
         String to = jsonMessage.optString("To", "");
         String toCC = jsonMessage.optString("ToСС", "");
@@ -108,7 +153,7 @@ public class KafkaEmailSender {
 
         // Проход по массиву URLS и загрузка файлов
         StringBuilder filePaths = new StringBuilder();
-        logger.info("Starting download Files ...");
+        logger.info("Start download Files ...");
         for (int i = 0; i < urls.length(); i++) {
             String url = urls.getString(i);
             String filePath = downloadFile(url, uuid);
@@ -122,12 +167,12 @@ public class KafkaEmailSender {
         }
         logger.info("Stop download Files ...");
 
-        logger.info("Starting send Email ...");
+        logger.info("Start send Email ...");
         // Отправка сообщения по электронной почте
         sendEmail(to, toCC, caption, body, filePaths.toString());
         logger.info("Stop send Email ...");
 
-        logger.info("Starting delete Directory Temp...");
+        logger.info("Start delete Directory Temp...");
         // Удаление файлов из tmp
         if (filePaths.length() > 0) {
             deleteDirectory(Path.of(FILE_PATH + uuid));
@@ -160,7 +205,7 @@ public class KafkaEmailSender {
                     try (InputStream in = httpConn.getInputStream()) {
                         // Копирование файла
                         Files.copy(in, Paths.get(fullPath), StandardCopyOption.REPLACE_EXISTING);
-                        logger.info("File downloaded access"+ fullPath);
+                        logger.info("File downloaded access" + fullPath);
                         //System.out.println("Файл успешно скачан: " + fullPath);
                         return fullPath;
                     }
@@ -177,7 +222,7 @@ public class KafkaEmailSender {
 
             if (attempt < attempts) {
                 try {
-                    Thread.sleep(1000); // Задержка на 1 секунду
+                    sleep(1000); // Задержка на 1 секунду
                 } catch (InterruptedException e) {
                     logger.error("An error 'downloadFile' stopping wait", e);
                     System.err.println("Ошибка при задержке: " + e.getMessage());
@@ -251,12 +296,12 @@ public class KafkaEmailSender {
                     //System.out.printf("Email sent error to %s, copy %s ", to, toCC);
                 }
                 // Задержка на 1 секунду (1000 миллисекунд)
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    logger.error("An error 'downloadFile' stopping wait", e);
-                    e.printStackTrace();
-                }
+//                try {
+//                    sleep(1000);
+//                } catch (InterruptedException e) {
+//                    logger.error("An error 'downloadFile' stopping wait", e);
+//                    e.printStackTrace();
+//                }
                 num_attempts--;
 
             }
@@ -277,15 +322,14 @@ public class KafkaEmailSender {
     }
 
     static void deleteDirectory(Path path) throws IOException {
-        // Используем Files.walkFileTree для рекурсивного удаления
-        Files.walk(path).sorted((a, b) -> b.compareTo(a)) // Сортируем в обратном порядке для удаления файлов перед каталогами
+        // Files.walkFileTree для рекурсивного удаления
+        Files.walk(path).sorted((a, b) -> b.compareTo(a)) // Сортируем в обратном порядке перед каталогами
                 .forEach(p -> {
                     try {
                         Files.delete(p);
-                        logger.info("File delete access"+ p);
+                        logger.info("File delete access" + p);
                     } catch (IOException e) {
                         logger.error("An error 'deleteDirectory' ", e);
-                        //System.err.println("Ошибка при удалении: " + p + " - " + e.getMessage());
                     }
                 });
     }

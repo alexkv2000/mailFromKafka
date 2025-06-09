@@ -24,7 +24,7 @@ public class App {
         // Создание KafkaProducer
         KafkaProducer<String, String> producer = new KafkaProducer<>(props);
         //StringBuilder sbName = new StringBuilder();
-        for (int i = 0; i < 20; i++) {
+        for (int i = 0; i < 1; i++) {
            // sbName.append("test").append(i);
             JSONObject msg = new JSONObject();
             msg.put("To", "KvochkinAY@itsnn.ru");

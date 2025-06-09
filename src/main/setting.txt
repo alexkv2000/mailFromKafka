@@ -7,3 +7,4 @@ SMTP_SERVER=email.itsnn.ru
 FILE_PATH=c:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\
 NUM_THREADS=20
 NUM_ATTEMPT=5
+LIMITSELECT=200
