@@ -24,8 +24,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.sql.*;
+import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Collections;
+import java.util.Date;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
@@ -55,7 +57,7 @@ public class ConsumerServerDV {
     private static final String FILE_PATH = configLoader.getProperty("FILE_PATH");
     private static final int NUM_THREADS = Integer.parseInt(configLoader.getProperty("NUM_THREADS"));
     private static final int NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
-    private static final String LIMIT_SELECT = configLoader.getProperty("LIMITSELECT");
+    private static final String LIMIT_SELECT = configLoader.getProperty("LIMIT_SELECT");
 
     public static void main(String[] args) throws SQLException {
         Properties consumerProps = new Properties();
@@ -145,7 +147,14 @@ public class ConsumerServerDV {
         String caption = jsonMessage.optString("Caption", "Информация от сужбы DocsVision");
         String body = jsonMessage.optString("Body", "");
         // Получение массива URLS
-        JSONArray urls = jsonMessage.getJSONArray("Url");
+        JSONArray urls = new JSONArray();
+        if (jsonMessage.has("Url") && !jsonMessage.isNull("Url")) {
+            JSONArray urls_ = jsonMessage.getJSONArray("Url");
+            if (urls_.length() > 0) {
+                // Массив не пустой, можно работать с ним
+                urls = urls_;
+            }
+        }
 
         // Создать директорию (из IDDoc)
         UUID uuid = UUID.randomUUID();
@@ -239,7 +248,8 @@ public class ConsumerServerDV {
         props.put("mail.smtp.host", SMTP_SERVER);
         props.put("mail.smtp.port", "587");
         props.put("mail.smtp.ssl.socketFactory", SSLSocketFactory.getDefault());
-
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
+        String formattedDate = dateFormat.format(new Date());
         // Создание SSLContext и SSLSocketFactory
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
@@ -247,10 +257,10 @@ public class ConsumerServerDV {
             SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
 
             // Установка SSLSocketFactory в свойства
-            props.put("mail.smtp.ssl.socketFactory", sslSocketFactory);
+            props.put("mail.smtp.ssl.socketFactory " + formattedDate, sslSocketFactory);
 
         } catch (Exception e) {
-            logger.error("An error 'sendEmail' create SSLContext ", e);
+            logger.error("An error 'sendEmail' create SSLContext " + formattedDate, e);
             e.printStackTrace();
         }
 
@@ -283,16 +293,17 @@ public class ConsumerServerDV {
             }
             message.setContent(multipart);
             //Отправка сообщения
-            Integer num_attempts = NUM_ATTEMPT;
+            int num_attempts = NUM_ATTEMPT;
+
             while (num_attempts != 0) {
                 try {
                     Transport.send(message);
-                    logger.info("Email sent successfully");
+                    logger.info("Email sent successfully " + formattedDate);
                     //System.out.printf("Email sent successfully to %s, copy %s ", to, toCC);
                     break;
                 } catch (Exception ee) {
                     ee.printStackTrace();
-                    logger.error("An error 'sendEmail' To or ToCC", ee);
+                    logger.error("An error 'sendEmail' To or ToCC " + formattedDate, ee);
                     //System.out.printf("Email sent error to %s, copy %s ", to, toCC);
                 }
                 // Задержка на 1 секунду (1000 миллисекунд)
