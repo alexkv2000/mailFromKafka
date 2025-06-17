@@ -1,4 +1,4 @@
-package kvo.separat;
+package kvo.separat.kafkaSender;
 
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;

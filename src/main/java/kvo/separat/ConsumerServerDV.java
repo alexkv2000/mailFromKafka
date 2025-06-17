@@ -24,9 +24,9 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.sql.*;
-import java.text.SimpleDateFormat;
 import java.time.Duration;
 import java.util.Collections;
+import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Properties;
 import java.util.UUID;
@@ -58,6 +58,7 @@ public class ConsumerServerDV {
     private static final int NUM_THREADS = Integer.parseInt(configLoader.getProperty("NUM_THREADS"));
     private static final int NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
     private static final String LIMIT_SELECT = configLoader.getProperty("LIMIT_SELECT");
+    private static final String SERVER = configLoader.getProperty("SERVER");
 
     public static void main(String[] args) throws SQLException {
         Properties consumerProps = new Properties();
@@ -68,20 +69,9 @@ public class ConsumerServerDV {
         logger.info("Start Kafka source ...");
 
         try (Connection connection = DriverManager.getConnection("jdbc:sqlite:D:/DataBase/sql_kafka.s3db")) {
-            String createTableSQL = "CREATE TABLE IF NOT EXISTS messages (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "kafka_topic TEXT NOT NULL," +
-                    "message TEXT NOT NULL," +
-                    "date_create TIMESTAMP NOT NULL," +
-                    "status TEXT DEFAULT NULL," +
-                    "date_end TIMESTAMP DEFAULT NULL" +
-                    ");";
-            try (PreparedStatement preparedStatement = connection.prepareStatement(createTableSQL)) {
-                preparedStatement.executeUpdate();
-            }
+            createTableIsNotExist_Massages(connection);
 
-            String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create) VALUES (?, ?, ?)";
-
+            String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create, server) VALUES (?, ?, ?, ?)";
             try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(consumerProps)) {
                 consumer.subscribe(Collections.singletonList(TOPIC));
                 ExecutorService executor = Executors.newFixedThreadPool(NUM_THREADS);
@@ -93,19 +83,27 @@ public class ConsumerServerDV {
                             preparedStatement.setString(1, record.topic());
                             preparedStatement.setString(2, record.value());
                             preparedStatement.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
+                            preparedStatement.setString(4, SERVER);
                             preparedStatement.executeUpdate();
                         } catch (Exception e) {
                             logger.error("Error processing Insert DB", e);
                         }
 
                     }
-                    // <-- Добавление в БД новые сообщения
-
+                    String updateSQL = "UPDATE messages SET status = 'select', server = ? WHERE id in (SELECT id FROM messages WHERE status IS NULL AND kafka_topic = ? AND server = ? LIMIT ?)";
+                    try (PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
+                        updateStatement.setString(1, SERVER);
+                        updateStatement.setString(2, TOPIC);
+                        updateStatement.setString(3, SERVER);
+                        updateStatement.setString(4, LIMIT_SELECT);
+                        updateStatement.executeUpdate();
+                    }
                     // --> Отправка сообщений (по 200 штук)
-                    String selectSQL = "SELECT * FROM messages WHERE status IS NULL AND kafka_topic = ? LIMIT ?";
+                    String selectSQL = "SELECT * FROM messages WHERE status = 'select' AND kafka_topic = ? AND server = ? LIMIT ?";
                     try (PreparedStatement preparedStatement = connection.prepareStatement(selectSQL)) {
                         preparedStatement.setString(1, TOPIC);
-                        preparedStatement.setString(2, LIMIT_SELECT);
+                        preparedStatement.setString(2, SERVER);
+                        preparedStatement.setString(3, LIMIT_SELECT);
                         ResultSet resultSet = preparedStatement.executeQuery();
                         while (resultSet.next()) {
                             String msg = resultSet.getString("message");
@@ -116,7 +114,6 @@ public class ConsumerServerDV {
                                     throw new RuntimeException(e);
                                 }
                             });
-
                             ChangeStatusMess(connection, resultSet); // --> Обновление статуса и времени отправки
                             try {
                                 sleep(1000);
@@ -127,6 +124,21 @@ public class ConsumerServerDV {
                     }
                 }
             }
+        }
+    }
+
+    private static void createTableIsNotExist_Massages(Connection connection) throws SQLException {
+        String createTableSQL = "CREATE TABLE IF NOT EXISTS messages (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                "kafka_topic TEXT NOT NULL," +
+                "message TEXT NOT NULL," +
+                "date_create TIMESTAMP NOT NULL," +
+                "status TEXT DEFAULT NULL," +
+                "date_end TIMESTAMP DEFAULT NULL," +
+                "server TEXT DEFAULT NULL" +
+                ");";
+        try (PreparedStatement preparedStatement = connection.prepareStatement(createTableSQL)) {
+            preparedStatement.executeUpdate();
         }
     }
 
@@ -209,18 +221,14 @@ public class ConsumerServerDV {
                     // Извлечение имени файла
                     fileName = path.substring(path.lastIndexOf('/') + 1);
                     fullPath = FILE_PATH + uuid.toString() + "\\" + fileName;
-
                     // Получение InputStream из URL
                     try (InputStream in = httpConn.getInputStream()) {
-                        // Копирование файла
                         Files.copy(in, Paths.get(fullPath), StandardCopyOption.REPLACE_EXISTING);
                         logger.info("File downloaded access" + fullPath);
-                        //System.out.println("Файл успешно скачан: " + fullPath);
                         return fullPath;
                     }
                 } else {
                     logger.error("An error 'downloadFile' " + httpConn.getResponseCode());
-                    //System.out.println("Ошибка ответа от сервера закачки файлов: " + httpConn.getResponseCode());
                 }
                 // Закрытие соединения
                 httpConn.disconnect();
@@ -248,8 +256,10 @@ public class ConsumerServerDV {
         props.put("mail.smtp.host", SMTP_SERVER);
         props.put("mail.smtp.port", "587");
         props.put("mail.smtp.ssl.socketFactory", SSLSocketFactory.getDefault());
+
         SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss");
         String formattedDate = dateFormat.format(new Date());
+
         // Создание SSLContext и SSLSocketFactory
         try {
             SSLContext sslContext = SSLContext.getInstance("TLS");
@@ -263,7 +273,6 @@ public class ConsumerServerDV {
             logger.error("An error 'sendEmail' create SSLContext " + formattedDate, e);
             e.printStackTrace();
         }
-
         // Получение сеанса
         Session session = setSession(Session.getInstance(props));
 
@@ -273,11 +282,9 @@ public class ConsumerServerDV {
             message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
             message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(toCC));
             message.setSubject(caption);
-
             // Создание текстовой части сообщения
             MimeBodyPart textPart = new MimeBodyPart();
             textPart.setText(body);
-
             // Объединение частей в одно сообщение
             Multipart multipart = new MimeMultipart();
             multipart.addBodyPart(textPart);
@@ -294,7 +301,6 @@ public class ConsumerServerDV {
             message.setContent(multipart);
             //Отправка сообщения
             int num_attempts = NUM_ATTEMPT;
-
             while (num_attempts != 0) {
                 try {
                     Transport.send(message);
@@ -303,6 +309,7 @@ public class ConsumerServerDV {
                     break;
                 } catch (Exception ee) {
                     ee.printStackTrace();
+
                     logger.error("An error 'sendEmail' To or ToCC " + formattedDate, ee);
                     //System.out.printf("Email sent error to %s, copy %s ", to, toCC);
                 }
@@ -314,13 +321,11 @@ public class ConsumerServerDV {
 //                    e.printStackTrace();
 //                }
                 num_attempts--;
-
             }
         } catch (Exception e) {
             logger.error("An error 'sendEmail' Transport.send(message) ", e);
             e.printStackTrace();
         }
-
     }
 
     static Session setSession(Session props) {
@@ -344,5 +349,4 @@ public class ConsumerServerDV {
                     }
                 });
     }
-
 }

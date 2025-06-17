@@ -7,4 +7,5 @@ PASSWORD=!_Dwkflw17
 FILE_PATH=c:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\
 NUM_THREADS=20
 NUM_ATTEMPT=5
-LIMIT_SELECT=200
+LIMIT_SELECT=150
+SERVER=doc-test
