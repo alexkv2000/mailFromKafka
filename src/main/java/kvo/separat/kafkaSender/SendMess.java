@@ -10,6 +10,7 @@ import org.json.JSONObject;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.UUID;
 
 public class SendMess {
 
@@ -27,21 +28,23 @@ public class SendMess {
         String topic = "test-topic";
         String recipient = "KvochkinAY@itsnn.ru";
         //String recipientCC = "AlexKv2000@mail.ru";
+
         List<String> urls = List.of(
-                "http://zagorie.ru/upload/iblock/4ea/4eae10bf98dde4f7356ebef161d365d5.pdf",
+//                "http://zagorie.ru/upload/iblock/4ea/4eae10bf98dde4f7356ebef161d365d5.pdf",
                 "http://tvojkomp.ru/wp-content/uploads/2016/08/pdf-forma-dlya-zapolneniya.pdf",
-                "http://usefulscript.ru/download/pdf_doc_site.doc",
+//                "http://usefulscript.ru/download/pdf_doc_site.doc",
                 "http://crewmarket.net/wp-content/uploads/application_form.xls"
         );
 
         // Отправка сообщений
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 800; i++) {
             Message message = MessageBuilder.builder()
                     .to(recipient)
                     // .toCC(recipientCC)
-                    .caption(String.format("%s %d: %s ", "Потоков 20: Тема сообщения ", i, LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))))
+                    .caption(String.format("%s %d: %s ", "!Потоков 20: Тема сообщения ", i, LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))))
                     .body(String.format("%s : %d %s", "Тело сообщения", i, "сообщение"))
                     .urls(urls)
+                    .uuid()
                     .build();
 
             messageSender.sendMessage(topic, message);

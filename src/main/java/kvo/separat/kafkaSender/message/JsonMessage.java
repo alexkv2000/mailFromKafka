@@ -3,6 +3,7 @@ package kvo.separat.kafkaSender.message;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.util.List;
+import java.util.UUID;
 
 //Реализация интерфейса Message
 public class JsonMessage implements Message {
@@ -12,12 +13,15 @@ public class JsonMessage implements Message {
     private final String body;
     private final List<String> urls;
 
-    public JsonMessage(String to, String toCC, String caption, String body, List<String> urls) {
+    private final UUID uuid;
+
+    public JsonMessage(String to, String toCC, String caption, String body, List<String> urls, UUID uuid) {
         this.to = to;
         this.toCC = toCC;
         this.caption = caption;
         this.body = body;
         this.urls = urls;
+        this.uuid = uuid;
     }
 
     @Override
@@ -36,6 +40,7 @@ public class JsonMessage implements Message {
             }
         }
         msg.put("Url", urlsArray);
+        msg.put("uuid", uuid);
         return msg;
     }
 }

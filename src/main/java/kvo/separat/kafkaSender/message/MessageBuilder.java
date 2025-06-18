@@ -7,6 +7,7 @@ import kvo.separat.kafkaSender.producer.Producer;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.UUID;
 
 //Строитель для сообщений
 public class MessageBuilder {
@@ -15,12 +16,18 @@ public class MessageBuilder {
     private String caption;
     private String body;
     private List<String> urls;
+    private UUID uuid;
 
     private MessageBuilder() {
     }
 
     public static MessageBuilder builder() {
         return new MessageBuilder();
+    }
+
+    public MessageBuilder uuid() {
+        this.uuid = UUID.randomUUID();
+        return this;
     }
 
     public MessageBuilder to(String to) {
@@ -48,7 +55,6 @@ public class MessageBuilder {
     }
 
     public Message build() {
-        return new JsonMessage(to, toCC, caption, body, urls);
+        return new JsonMessage(to, toCC, caption, body, urls, uuid);
     }
-
 }

@@ -158,6 +158,7 @@ public class ConsumerServerDV {
         String toCC = jsonMessage.optString("ToСС", "");
         String caption = jsonMessage.optString("Caption", "Информация от сужбы DocsVision");
         String body = jsonMessage.optString("Body", "");
+        UUID uuid = UUID.fromString(jsonMessage.optString("uuid", ""));
         // Получение массива URLS
         JSONArray urls = new JSONArray();
         if (jsonMessage.has("Url") && !jsonMessage.isNull("Url")) {
@@ -169,7 +170,7 @@ public class ConsumerServerDV {
         }
 
         // Создать директорию (из IDDoc)
-        UUID uuid = UUID.randomUUID();
+//        UUID uuid = UUID.randomUUID();
         Files.createDirectories(Path.of((FILE_PATH + uuid)));
 
         // Проход по массиву URLS и загрузка файлов
