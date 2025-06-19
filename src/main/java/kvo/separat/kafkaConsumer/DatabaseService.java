@@ -64,16 +64,17 @@ public class DatabaseService {
         }
     }
 
-    public void updateMessagesStatus(String topic, String server, int limitSelect) {
-        String updateSQL = "UPDATE messages SET status = 'select', server = ? WHERE id in (SELECT id FROM messages WHERE status IS NULL AND kafka_topic = ? AND server = ? LIMIT ?)";
+    public void updateMessagesStatus(String topic, String server, String status, int limitSelect) {
+        String updateSQL = "UPDATE messages SET status = ?, server = ? WHERE id in (SELECT id FROM messages WHERE status IS NULL AND kafka_topic = ? AND server = ? LIMIT ?)";
 
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
 
-            updateStatement.setString(1, server);
-            updateStatement.setString(2, topic);
-            updateStatement.setString(3, server);
-            updateStatement.setInt(4, limitSelect);
+            updateStatement.setString(1, status);
+            updateStatement.setString(2, server);
+            updateStatement.setString(3, topic);
+            updateStatement.setString(4, server);
+            updateStatement.setInt(5, limitSelect);
             updateStatement.executeUpdate();
 
         } catch (SQLException e) {
@@ -81,8 +82,8 @@ public class DatabaseService {
         }
     }
 
-    public void updateMessageStatusDate(int messageId, String status, Timestamp timestamp) throws SQLException {
-        String updateSQL = "UPDATE messages SET status = ?, date_end = ? WHERE id = ?";
+    public void updateMessageStatusDate(String topic, String server, int messageId, String status, Timestamp timestamp) throws SQLException {
+        String updateSQL = "UPDATE messages SET status = ?, date_end = ? WHERE id = ? AND kafka_topic = ? AND server = ?";
 
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
@@ -90,6 +91,8 @@ public class DatabaseService {
             updateStatement.setString(1, status);
             updateStatement.setTimestamp(2, timestamp);
             updateStatement.setInt(3, messageId);
+            updateStatement.setString(4, topic);
+            updateStatement.setString(5, server);
             updateStatement.executeUpdate();
             logger.info("Database UPDATE Statue and Date_END");
         } catch (SQLException e) {

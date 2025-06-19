@@ -36,8 +36,10 @@ public class EmailService {
         JSONArray urls = messageData.getUrls();
         UUID uuid = messageData.getUuid();
 
-        String filePaths = fileService.downloadFiles(urls, uuid);
-
+        String filePaths = null;
+        if(urls.length()>0) {
+            filePaths = fileService.downloadFiles(urls, uuid);
+        }
         logger.info("Start send Email ...");
         sendMail(to, toCC, caption, body, filePaths);
         logger.info("Stop send Email ...");

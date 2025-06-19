@@ -38,7 +38,6 @@ public class ConsumerServer {
 
     public void start() throws SQLException {
         databaseService.createTableIfNotExist();
-        Iterable<ConsumerRecord<String, String>> records;
         List<ConsumerRecord<String, String>> recordList;
         List<MessageData> resultSet;
 
@@ -46,7 +45,7 @@ public class ConsumerServer {
             recordList = getConsumerRecords();
             databaseService.insertMessages(recordList, topic, server);
 
-            databaseService.updateMessagesStatus(topic, server, limitSelect);
+            databaseService.updateMessagesStatus(topic, server, "select", limitSelect);
             resultSet = databaseService.selectMessages(topic, server, limitSelect);
             List<Future<?>> futures = new ArrayList<>();
             for (MessageData result : resultSet) {
@@ -54,10 +53,10 @@ public class ConsumerServer {
                     try {
                         result.setCaption(result.getId() + " " + result.getCaption());
                         emailService.sendMessage(result, fileService); // --> Отправить сообщение
-                        databaseService.updateMessageStatusDate(result.getId(), "send", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
+                        databaseService.updateMessageStatusDate(topic, server, result.getId(), "send", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
                     } catch (IOException | SQLException e) {
                         try {
-                            databaseService.updateMessageStatusDate(result.getId(), "error", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
+                            databaseService.updateMessageStatusDate(topic, server, result.getId(), "error", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
                         } catch (SQLException ex) {
                             throw new RuntimeException(ex);
                         }
@@ -69,7 +68,9 @@ public class ConsumerServer {
             for (Future<?> future : futures) {
                 try {
                     future.get(); // Блокируем до завершения задачи
+
                 } catch (Exception e) {
+                    logger.info("Ошибка закачки данных по url");
                     e.printStackTrace();
                 }
             }
@@ -104,7 +105,6 @@ public class ConsumerServer {
 //                            }
 //                            return null; // Возвращаем null для завершения exceptionally
 //                        });
-//            TimeUnit.SECONDS.sleep(10);
         }
     }
 
