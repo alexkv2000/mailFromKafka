@@ -64,13 +64,13 @@ public class DatabaseService {
         }
     }
 
-    public void updateMessagesStatus(String topic, String server, int limitSelect, String newServer) {
+    public void updateMessagesStatus(String topic, String server, int limitSelect) {
         String updateSQL = "UPDATE messages SET status = 'select', server = ? WHERE id in (SELECT id FROM messages WHERE status IS NULL AND kafka_topic = ? AND server = ? LIMIT ?)";
 
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
 
-            updateStatement.setString(1, newServer);
+            updateStatement.setString(1, server);
             updateStatement.setString(2, topic);
             updateStatement.setString(3, server);
             updateStatement.setInt(4, limitSelect);
@@ -81,46 +81,22 @@ public class DatabaseService {
         }
     }
 
-    public void processMessages(String topic, String server, int limitSelect, Consumer<MessageData> messageConsumer) {
-        String selectSQL = "SELECT * FROM messages WHERE status = 'select' AND kafka_topic = ? AND server = ? LIMIT ?";
-
-        try (Connection connection = getConnection();
-             PreparedStatement preparedStatement = connection.prepareStatement(selectSQL)) {
-
-            preparedStatement.setString(1, topic);
-            preparedStatement.setString(2, server);
-            preparedStatement.setInt(3, limitSelect);
-
-            try (ResultSet resultSet = preparedStatement.executeQuery()) {
-                while (resultSet.next()) {
-                    MessageData messageData = convertResultSetToMessageData(resultSet);
-                    messageConsumer.accept(messageData);
-
-                }
-            }
-
-        } catch (SQLException e) {
-            logger.error("Error processing messages from database", e);
-        }
-    }
-
-    public void updateMessageStatus(int messageId, String status) throws SQLException {
+    public void updateMessageStatusDate(int messageId, String status, Timestamp timestamp) throws SQLException {
         String updateSQL = "UPDATE messages SET status = ?, date_end = ? WHERE id = ?";
 
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
 
             updateStatement.setString(1, status);
-            updateStatement.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
+            updateStatement.setTimestamp(2, timestamp);
             updateStatement.setInt(3, messageId);
             updateStatement.executeUpdate();
-
+            logger.info("Database UPDATE Statue and Date_END");
         } catch (SQLException e) {
             logger.error("Error updating message status in database", e);
-            throw e;
+            //          throw e;
         }
     }
-
     MessageData convertResultSetToMessageData(ResultSet resultSet) throws SQLException {
         String message = resultSet.getString("message");
         JSONObject jsonMessage = new JSONObject(message);
@@ -129,6 +105,7 @@ public class DatabaseService {
         String toCC = jsonMessage.optString("ToСС", "");
         String caption = jsonMessage.optString("Caption", "Информация от сужбы DocsVision");
         String body = jsonMessage.optString("Body", "");
+        UUID uuid = UUID.fromString(jsonMessage.optString("uuid", ""));
 
         JSONArray urls = new JSONArray();
         if (jsonMessage.has("Url") && !jsonMessage.isNull("Url")) {
@@ -137,14 +114,12 @@ public class DatabaseService {
                 urls = urls_;
             }
         }
-
-        return new MessageData(resultSet.getInt("id"), to, toCC, caption, body, urls, UUID.randomUUID());
+        return new MessageData(resultSet.getInt("id"), to, toCC, caption, body, urls, uuid);
     }
-
     public List<MessageData> selectMessages(String topic, String server, int limitSelect) {
-        String selectSQL = "SELECT * FROM messages WHERE status = 'select' AND kafka_topic = ? AND server = ? LIMIT ?";
+        String selectSQL = "SELECT * FROM messages WHERE status = 'select' AND date_end is null AND kafka_topic = ? AND server = ? LIMIT ?";
 
-        List<MessageData> l = new ArrayList<>();
+        List<MessageData> aListMessage = new ArrayList<>();
 
         try (Connection connection = getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(selectSQL)) {
@@ -155,13 +130,10 @@ public class DatabaseService {
 
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 while (resultSet.next()) {
-
-                    l.add(convertResultSetToMessageData(resultSet));
-
+                    aListMessage.add(convertResultSetToMessageData(resultSet));
                 }
-                return l;
+                return aListMessage;
             }
-
         } catch (SQLException e) {
             logger.error("Error processing messages from database", e);
         }

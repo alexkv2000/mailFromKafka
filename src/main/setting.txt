@@ -5,9 +5,9 @@ SMTP_SERVER=email.itsnn.ru
 EMAIL=DVWorkflow@gaz.ru
 PASSWORD=!_Dwkflw17
 FILE_PATH=c:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\
-NUM_THREADS=10
+NUM_THREADS=20
 NUM_ATTEMPT=5
-LIMIT_SELECT=150
+LIMIT_SELECT=100
 SERVER=doc-test
 
 DB_PATH=D:/DataBase/sql_kafka.s3db

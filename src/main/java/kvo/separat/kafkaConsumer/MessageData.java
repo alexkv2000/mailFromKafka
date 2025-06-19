@@ -8,7 +8,7 @@ public class MessageData {
     private final int id;
     private final String to;
     private final String toCC;
-    private final String caption;
+    private String caption;
     private final String body;
     private final JSONArray urls;
     private final UUID uuid;
@@ -37,6 +37,10 @@ public class MessageData {
 
     public String getCaption() {
         return caption;
+    }
+
+    public void setCaption(String caption) {
+        this.caption = caption;
     }
 
     public String getBody() {

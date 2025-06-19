@@ -38,7 +38,7 @@ import static java.lang.Thread.sleep;
 public class ConsumerServerDV {
 
     private static final Logger logger = LoggerFactory.getLogger(ConsumerServerDV.class);
-    static ConfigLoader configLoader;
+    public static ConfigLoader configLoader;
 
     static {
         try {

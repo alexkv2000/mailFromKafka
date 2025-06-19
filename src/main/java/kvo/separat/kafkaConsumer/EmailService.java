@@ -13,10 +13,10 @@ import java.io.IOException;
 import java.util.Properties;
 import java.util.UUID;
 
-import static java.lang.Thread.sleep;
+import static kvo.separat.ConsumerServerDV.configLoader;
 
 public class EmailService {
-
+    private static final int NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
     private final String email;
     private final String password;
@@ -42,10 +42,9 @@ public class EmailService {
         sendMail(to, toCC, caption, body, filePaths);
         logger.info("Stop send Email ...");
 
-//        if (filePaths.length() > 0) {
-            fileService.deleteDirectory(uuid);
-            logger.info("Directory deleted access ..." + fileService.getFilePath(uuid));
-//        }
+        fileService.deleteDirectory(uuid);
+        logger.info("Directory deleted access ..." + fileService.getFilePath(uuid));
+
     }
 
     private void sendMail(String to, String toCC, String caption, String body, String filePaths) {
@@ -86,10 +85,19 @@ public class EmailService {
             }
 
             message.setContent(multipart);
-
-            Transport.send(message);
-
-            logger.info("Email sent successfully to: " + to);
+            int num_attempts = NUM_ATTEMPT;
+            while (num_attempts != 0) {
+                try {
+                    Transport.send(message);
+                    logger.info("Email sent successfully " + message.getSubject());
+                    break;
+                } catch (Exception ee) {
+                    ee.printStackTrace();
+                    logger.error("An error 'sendEmail' To or ToCC " + message.getSubject(), ee);
+                }
+                num_attempts--;
+            }
+            logger.info("Email " + message.getSubject() + "sent successfully to: " + to);
         } catch (MessagingException e) {
             logger.error("Error sending email", e);
         } catch (IOException e) {
