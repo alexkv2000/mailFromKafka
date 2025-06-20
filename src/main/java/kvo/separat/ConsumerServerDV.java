@@ -39,10 +39,11 @@ public class ConsumerServerDV {
 
     private static final Logger logger = LoggerFactory.getLogger(ConsumerServerDV.class);
     public static ConfigLoader configLoader;
-
+    static String currentDir = System.getProperty("user.dir");
+    static String configPath = currentDir + "/config/setting.txt"; // Если файл в папке 'config'
     static {
         try {
-            configLoader = new ConfigLoader("src/main/setting.txt");
+            configLoader = new ConfigLoader(configPath);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

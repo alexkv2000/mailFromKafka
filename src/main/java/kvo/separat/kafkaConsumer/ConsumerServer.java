@@ -118,7 +118,9 @@ public class ConsumerServer {
     }
 
     public static void main(String[] args) throws SQLException, IOException {
-        ConfigLoader configLoader = new ConfigLoader("src/main/setting.txt");
+        String currentDir = System.getProperty("user.dir");
+        String configPath = currentDir + "\\config\\setting.txt";
+        ConfigLoader configLoader = new ConfigLoader(configPath);
 
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
         DatabaseService databaseService = new DatabaseService(configLoader);

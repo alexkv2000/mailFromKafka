@@ -19,11 +19,13 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 public class KafkaEmailSenderTest extends KafkaEmailSender{
+    static String currentDir = System.getProperty("user.dir");
+    static String configPath = currentDir + "\\config\\setting.txt";
     static ConfigLoader configLoader;
     //   private KafkaEmailSender kafkaEmailSender;
     static {
         try {
-            configLoader = new ConfigLoader("src/main/setting.txt");
+            configLoader = new ConfigLoader(configPath);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
