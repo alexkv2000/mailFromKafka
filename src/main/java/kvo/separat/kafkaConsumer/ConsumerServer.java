@@ -56,7 +56,7 @@ public class ConsumerServer {
                         databaseService.updateMessageStatusDate(topic, server, result.getId(), "send", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
                     } catch (IOException | SQLException e) {
                         try {
-                            databaseService.updateMessageStatusDate(topic, server, result.getId(), "error", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
+                            databaseService.updateMessageStatusDate(topic, server, result.getId(), "error", new Timestamp(System.currentTimeMillis())); // --> добавил подсчет попыток NUM_ATTEMPT
                         } catch (SQLException ex) {
                             throw new RuntimeException(ex);
                         }
@@ -68,7 +68,7 @@ public class ConsumerServer {
             for (Future<?> future : futures) {
                 try {
                     future.get(); // Блокируем до завершения задачи
-
+//TODO Удалить записи успешно отправленные и попытки которые превысили NUM_ATTEMPT
                 } catch (Exception e) {
                     logger.info("Ошибка закачки данных по url");
                     e.printStackTrace();
@@ -117,7 +117,7 @@ public class ConsumerServer {
         return recordList;
     }
 
-    public static void main(String[] args) throws SQLException, IOException, InterruptedException {
+    public static void main(String[] args) throws SQLException, IOException {
         ConfigLoader configLoader = new ConfigLoader("src/main/setting.txt");
 
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);

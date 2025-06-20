@@ -10,12 +10,14 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Consumer;
+
+import static kvo.separat.ConsumerServerDV.configLoader;
 
 public class DatabaseService {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseService.class);
     private final String dbUrl;
+    private static final int NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
 
     public DatabaseService(ConfigLoader configLoader) {
         this.dbUrl = "jdbc:sqlite:" + configLoader.getProperty("DB_PATH");
@@ -33,7 +35,8 @@ public class DatabaseService {
                 "date_create TIMESTAMP NOT NULL," +
                 "status TEXT DEFAULT NULL," +
                 "date_end TIMESTAMP DEFAULT NULL," +
-                "server TEXT DEFAULT NULL" +
+                "server TEXT DEFAULT NULL," +
+                "NUM_ATTEMPT INTEGER DEFAULT 0" +
                 ");";
 
         try (Connection connection = getConnection();
@@ -83,16 +86,17 @@ public class DatabaseService {
     }
 
     public void updateMessageStatusDate(String topic, String server, int messageId, String status, Timestamp timestamp) throws SQLException {
-        String updateSQL = "UPDATE messages SET status = ?, date_end = ? WHERE id = ? AND kafka_topic = ? AND server = ?";
+        int numAttempt = getIncNumAttempt(messageId);
 
+        String updateSQL = "UPDATE messages SET status = ?, date_end = ?, NUM_ATTEMPT = ? WHERE id = ? AND kafka_topic = ? AND server = ?";
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
-
             updateStatement.setString(1, status);
             updateStatement.setTimestamp(2, timestamp);
-            updateStatement.setInt(3, messageId);
-            updateStatement.setString(4, topic);
-            updateStatement.setString(5, server);
+            updateStatement.setInt(3, ++numAttempt);
+            updateStatement.setInt(4, messageId);
+            updateStatement.setString(5, topic);
+            updateStatement.setString(6, server);
             updateStatement.executeUpdate();
             logger.info("Database UPDATE Statue and Date_END");
         } catch (SQLException e) {
@@ -100,6 +104,26 @@ public class DatabaseService {
             //          throw e;
         }
     }
+
+    private int getIncNumAttempt(int messageId) throws SQLException {
+        String selSQL = "SELECT DISTINCT NUM_ATTEMPT FROM messages WHERE id = ?";
+        try (Connection connection = getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(selSQL)) {
+            preparedStatement.setInt(1, messageId);
+            try (ResultSet resultSet = preparedStatement.executeQuery()) {
+                if (resultSet.next()) { // Проверка наличия результата
+                    return resultSet.getInt(1);
+                } else {
+                    logger.warn("No records found for message ID: " + messageId);
+                }
+            } catch (SQLException e) {
+                logger.error("Error select NUM_ATTEMPT on ID message ", e);
+                //          throw e;
+            }
+        }
+        return 0;
+    }
+
     MessageData convertResultSetToMessageData(ResultSet resultSet) throws SQLException {
         String message = resultSet.getString("message");
         JSONObject jsonMessage = new JSONObject(message);
@@ -119,9 +143,11 @@ public class DatabaseService {
         }
         return new MessageData(resultSet.getInt("id"), to, toCC, caption, body, urls, uuid);
     }
-    public List<MessageData> selectMessages(String topic, String server, int limitSelect) {
-        String selectSQL = "SELECT * FROM messages WHERE status = 'select' AND date_end is null AND kafka_topic = ? AND server = ? LIMIT ?";
 
+    public List<MessageData> selectMessages(String topic, String server, int limitSelect) {
+        String selectSQL = "SELECT * FROM messages WHERE (status = 'select' AND date_end is null AND kafka_topic = ? AND server = ?) " +
+                "OR (status = 'error' AND NUM_ATTEMPT < ? AND kafka_topic = ? AND server = ?) LIMIT ?";
+        // Добавены сообщения с Error кол-во цикла не превышает NUM_ATTEMPT
         List<MessageData> aListMessage = new ArrayList<>();
 
         try (Connection connection = getConnection();
@@ -129,7 +155,10 @@ public class DatabaseService {
 
             preparedStatement.setString(1, topic);
             preparedStatement.setString(2, server);
-            preparedStatement.setInt(3, limitSelect);
+            preparedStatement.setInt(3, NUM_ATTEMPT);
+            preparedStatement.setString(4, topic);
+            preparedStatement.setString(5, server);
+            preparedStatement.setInt(6, limitSelect);
 
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 while (resultSet.next()) {
