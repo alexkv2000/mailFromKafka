@@ -17,7 +17,10 @@ public class App {
         String startDate = now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
         // Настройки для подключения к Kafka
         Properties props = new Properties();
-        props.put("bootstrap.servers", "doc-test:9092");
+        //props.put("bootstrap.servers", "172.18.8.60:9092,172.18.2.198:9092");
+        props.put("bootstrap.servers", "172.18.2.198:9092,172.18.8.60:9092");
+        props.put("acks", "all");
+        props.put("retries", "3");
         props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
         props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
 
@@ -40,7 +43,7 @@ public class App {
             // Добавление массива URLS в JSON объект
             msg.put("Url", urls);
            // sbName.delete(0,20);
-            sendMessage(producer, "test-topic", msg);
+            sendMessage(producer, "topicDVMessage", msg);
         }
         // Закрытие producer
         producer.close();

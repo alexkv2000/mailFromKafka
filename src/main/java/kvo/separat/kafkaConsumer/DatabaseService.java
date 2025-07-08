@@ -162,7 +162,7 @@ public class DatabaseService {
 
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 while (resultSet.next()) {
-                    aListMessage.add(convertResultSetToMessageData(resultSet));
+                    aListMessage.add(convertResultSetToMessageData(resultSet)); //-> если кто-то добавит текст (НЕ JSON) просто закоментировать эту строку, потом вернуть.
                 }
                 return aListMessage;
             }

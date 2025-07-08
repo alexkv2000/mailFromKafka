@@ -19,7 +19,7 @@ public class KafkaProducerImpl implements Producer{
 
     @Override
     public void send(String topic, String message, Callback callback) {
-        ProducerRecord<String, String> record = new ProducerRecord<>(topic, message);
+        ProducerRecord<String, String> record = new ProducerRecord<>(topic, message); //TODO по необходимости добавить new ProducerRecord<>(topicName, 1, null, message); -  Отправка в partition 1
         kafkaProducer.send(record,callback);
     }
 

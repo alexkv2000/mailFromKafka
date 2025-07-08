@@ -17,23 +17,23 @@ public class SendMess {
         String startDate = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
 
         // Конфигурация Kafka
-        KafkaProducerFactory producerFactory = new KafkaProducerFactory("doc-test:9092");
+        KafkaProducerFactory producerFactory = new KafkaProducerFactory("172.18.8.60:9092,172.18.2.198:9092");
         Producer producer = producerFactory.createProducer();
 
         // Создание отправителя сообщений
         MessageSender messageSender = new MessageSender(producer);
 
         // Параметры сообщений
-        String topic = "test-topic";
+        String topic = "topicDVMessage";
         String recipient = "KvochkinAY@itsnn.ru";
         String recipientCC = null;
         //recipientCC = "AlexKv2000@mail.ru";
 
         List<String> urls = List.of(
-//                "http://zagorie.ru/upload/iblock/4ea/4eae10bf98dde4f7356ebef161d365d5.pdf",
-                "http://tvojkomp.ru/wp-content/uploads/2016/08/pdf-forma-dlya-zapolneniya.pdf",
-//                "http://usefulscript.ru/download/pdf_doc_site.doc",
-                "http://crewmarket.net/wp-content/uploads/application_form.xls"
+                "http://zagorie.ru/upload/iblock/4ea/4eae10bf98dde4f7356ebef161d365d5.pdf"
+             //   "http://tvojkomp.ru/wp-content/uploads/2016/08/pdf-forma-dlya-zapolneniya.pdf",
+                //                "http://usefulscript.ru/download/pdf_doc_site.doc",
+             //   "http://crewmarket.net/wp-content/uploads/application_form.xls"
         );
 
         // Отправка сообщений

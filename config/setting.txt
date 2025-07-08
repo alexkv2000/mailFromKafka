@@ -1,5 +1,5 @@
-TOPIC=test-topic
-BROKER=doc-test:9092
+TOPIC=topicDVMessage
+BROKER=172.18.8.60:9092,172.18.2.198:9092
 GROUP_ID=consumer-java-sender
 SMTP_SERVER=email.itsnn.ru
 EMAIL=DVWorkflow@gaz.ru

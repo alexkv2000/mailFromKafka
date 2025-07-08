@@ -52,7 +52,7 @@ public class ConsumerServer {
                 Future<?> future = executor.submit(() -> {
                     try {
                         result.setCaption(result.getId() + " " + result.getCaption());
-                        emailService.sendMessage(result, fileService); // --> Отправить сообщение
+                        emailService.sendMessage(result, fileService); // --> Отправить сообщение - изменить если именяется обработка JSON
                         databaseService.updateMessageStatusDate(topic, server, result.getId(), "send", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
                     } catch (IOException | SQLException e) {
                         try {
