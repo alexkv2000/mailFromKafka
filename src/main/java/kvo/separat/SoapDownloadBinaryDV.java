@@ -4,18 +4,32 @@ package kvo.separat;
 import java.io.*;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import kvo.separat.kafkaConsumer.ConfigLoader;
+import kvo.separat.kafkaConsumer.FileService;
 
 public class SoapDownloadBinaryDV {
+    private static final Logger logger = LoggerFactory.getLogger(SoapDownloadBinaryDV.class);
+    private static String filePath;
 
-    public static void main(String[] args) throws JsonProcessingException {
+    public static void main(String[] args) throws IOException {
+
         String jsonString = null;
         String currentDir = System.getProperty("user.dir");
         String configPath = currentDir + "\\config\\url.txt";
+        ConfigLoader configLoader = new ConfigLoader(configPath);
+        ConfigLoader config = new ConfigLoader(currentDir + "\\config\\setting.txt");
+        filePath = config.getProperty("FILE_PATH");
         InputStream is = null;
         // Проверяем и считываем файл
         try {
@@ -55,8 +69,11 @@ public class SoapDownloadBinaryDV {
         for (String key : myObject.Url.keySet()) {
             printBin = myObject.getUrl().get(key);
             //     saveFile(DatatypeConverter.parseBase64Binary(Arrays.toString(printBin)), "C:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\" + key);
-            saveFile(printBin, "C:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\" + key);
+            Files.createDirectories(Path.of(filePath + myObject.getUuid()));
+            saveFile(printBin, filePath + myObject.getUuid() + "\\" + key);
         }
+        // TODO включить на проде
+        //  deleteDirectory(UUID.fromString(myObject.getUuid()));
     }
 
     public static void saveFile(byte[] fileData, String filePath) {
@@ -80,6 +97,27 @@ public class SoapDownloadBinaryDV {
                     System.err.println("Ошибка при закрытии потока: " + e.getMessage());
                 }
             }
+        }
+    }
+
+    public static void deleteDirectory(UUID uuid) {
+        deleteDirectoryRecurs(Path.of(filePath + uuid));
+        logger.info("Deleted directory success: " + filePath + uuid);
+    }
+
+    private static void deleteDirectoryRecurs(Path path) {
+        try {
+            Files.walk(path)
+                    .sorted((p1, p2) -> -p1.compareTo(p2))
+                    .forEach(p -> {
+                        try {
+                            Files.delete(p);
+                        } catch (IOException e) {
+                            logger.error("Error deleting file/directory: " + p, e);
+                        }
+                    });
+        } catch (IOException e) {
+            logger.error("Error walking directory: " + path, e);
         }
     }
 

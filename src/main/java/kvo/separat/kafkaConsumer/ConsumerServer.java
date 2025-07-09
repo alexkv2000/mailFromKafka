@@ -74,37 +74,6 @@ public class ConsumerServer {
                     e.printStackTrace();
                 }
             }
-//                CompletableFuture.supplyAsync(() -> {
-//                            logger.info("Thread: " + messageId + " поток : " + Thread.currentThread().getName());
-//                            try {
-//                                logger.info("Message sent for ID: " + messageId + " поток : " + Thread.currentThread().getName());
-//                                emailService.sendMessage(finalResultSet, fileService); // --> Отправить сообщение
-//                                return messageId; // Возвращаем messageId для следующего этапа
-//                            } catch (IOException e) {
-//                                logger.error("Error sending message ID: " + messageId, e);
-//                                throw new RuntimeException(e);
-//                            }
-//                        }, executor)
-//                        .thenAccept(id -> {
-//                            try {
-//                                // Обновляем статус сообщения после успешной отправки
-//                                databaseService.updateMessageStatusDate(id, "send", new Timestamp(System.currentTimeMillis()));
-//                                logger.info("Updated message status to 'send' for ID: " + id);
-//                            } catch (SQLException e) {
-//                                logger.error("Error updating message status to 'send' for ID: " + id, e);
-//                                throw new RuntimeException(e);
-//                            }
-//                        })
-//                        .exceptionally(e -> {
-//                            // Обработаем исключение и обновим статус на 'error'
-//                            try {
-//                                databaseService.updateMessageStatusDate(messageId, "error", new Timestamp(System.currentTimeMillis()));
-//                                logger.error("Updated message status to 'error' for ID: " + messageId + " due to error: ", e);
-//                            } catch (SQLException ex) {
-//                                logger.error("Error updating message status to 'error' for ID: " + messageId, ex);
-//                            }
-//                            return null; // Возвращаем null для завершения exceptionally
-//                        });
         }
     }
 
