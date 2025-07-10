@@ -11,3 +11,8 @@ LIMIT_SELECT=100
 SERVER=doc-test
 
 DB_PATH=D:/DataBase/sql_kafka.s3db
+
+
+fetch.max.bytes=2147483647
+max.partition.fetch.bytes=2147483647
+fetch.max.wait.ms=500

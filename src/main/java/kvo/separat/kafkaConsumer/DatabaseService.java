@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -125,6 +126,7 @@ public class DatabaseService {
     }
 
     MessageData convertResultSetToMessageData(ResultSet resultSet) throws SQLException {
+        String fileName;
         String message = resultSet.getString("message");
         JSONObject jsonMessage = new JSONObject(message);
 
@@ -134,14 +136,22 @@ public class DatabaseService {
         String body = jsonMessage.optString("Body", "");
         UUID uuid = UUID.fromString(jsonMessage.optString("uuid", ""));
 
-        JSONArray urls = new JSONArray();
+        JSONObject urlFiles = new JSONObject(); // Создаем объект для хранения файлов
+
         if (jsonMessage.has("Url") && !jsonMessage.isNull("Url")) {
-            JSONArray urls_ = jsonMessage.getJSONArray("Url");
-            if (urls_.length() > 0) {
-                urls = urls_;
+            JSONObject urlsObj = jsonMessage.getJSONObject("Url");
+
+            // Получаем все ключи (имена файлов) из объекта Url
+            Iterator<String> keys = urlsObj.keys();
+
+            while (keys.hasNext()) {
+                fileName = keys.next();
+                String fileContent = urlsObj.getString(fileName);
+                urlFiles.put(fileName, fileContent);
             }
         }
-        return new MessageData(resultSet.getInt("id"), to, toCC, caption, body, urls, uuid);
+
+        return new MessageData(resultSet.getInt("id"), to, toCC, caption, body, urlFiles, uuid);
     }
 
     public List<MessageData> selectMessages(String topic, String server, int limitSelect) {

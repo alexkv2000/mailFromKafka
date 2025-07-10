@@ -1,7 +1,6 @@
 package kvo.separat.kafkaConsumer;
 
-import org.json.JSONArray;
-
+import org.json.JSONObject;
 import java.util.UUID;
 
 public class MessageData {
@@ -10,10 +9,10 @@ public class MessageData {
     private final String toCC;
     private String caption;
     private final String body;
-    private final JSONArray urls;
+    private final JSONObject urls;
     private final UUID uuid;
 
-    public MessageData(int id, String to, String toCC, String caption, String body, JSONArray urls, UUID uuid) {
+    public MessageData(int id, String to, String toCC, String caption, String body, JSONObject urls, UUID uuid) {
         this.id = id;
         this.to = to;
         this.toCC = toCC;
@@ -47,11 +46,15 @@ public class MessageData {
         return body;
     }
 
-    public JSONArray getUrls() {
+    public JSONObject getUrls() {
         return urls;
     }
 
     public UUID getUuid() {
         return uuid;
+    }
+
+    public boolean has(String uuid) {
+        return !uuid.isEmpty();
     }
 }

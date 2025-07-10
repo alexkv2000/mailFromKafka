@@ -1,6 +1,7 @@
 package kvo.separat.kafkaConsumer;
 
 import org.json.JSONArray;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,28 +29,28 @@ public class EmailService {
         this.smtpServer = configLoader.getProperty("SMTP_SERVER");
     }
 
-    public void sendMessage(MessageData messageData, FileService fileService) throws IOException {
-        String to = messageData.getTo();
-        String toCC = messageData.getToCC();
-        String caption = messageData.getCaption();
-        String body = messageData.getBody();
-        JSONArray urls = messageData.getUrls();
-        UUID uuid = messageData.getUuid();
+//    public void sendMessage(MessageData messageData, FileService fileService) throws IOException {
+//        String to = messageData.getTo();
+//        String toCC = messageData.getToCC();
+//        String caption = messageData.getCaption();
+//        String body = messageData.getBody();
+//        JSONObject urls = messageData.getUrls();
+//        UUID uuid = messageData.getUuid();
+//
+//        String filePaths = null;
+//        if(urls.length()>0) {
+//            filePaths = fileService.downloadFiles(urls, uuid);
+//        }
+//        logger.info("Start send Email ...");
+//        sendMail(to, toCC, caption, body, filePaths);
+//        logger.info("Stop send Email ...");
+//
+//        fileService.deleteDirectory(uuid);
+//        logger.info("Directory deleted access ..." + fileService.getFilePath(uuid));
+//
+//    }
 
-        String filePaths = null;
-        if(urls.length()>0) {
-            filePaths = fileService.downloadFiles(urls, uuid);
-        }
-        logger.info("Start send Email ...");
-        sendMail(to, toCC, caption, body, filePaths);
-        logger.info("Stop send Email ...");
-
-        fileService.deleteDirectory(uuid);
-        logger.info("Directory deleted access ..." + fileService.getFilePath(uuid));
-
-    }
-
-    private void sendMail(String to, String toCC, String caption, String body, String filePaths) {
+    public void sendMail(String to, String toCC, String caption, String body, String filePaths) {
         Properties props = new Properties();
         props.put("mail.smtp.auth", "true");
         props.put("mail.smtp.starttls.enable", "true");

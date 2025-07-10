@@ -1,5 +1,7 @@
 package kvo.separat.kafkaConsumer;
 
+import kvo.separat.SoapDownloadBinaryDV;
+import static kvo.separat.SoapDownloadBinaryDV.deleteDirectory;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,23 +15,24 @@ import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+
 public class ConsumerServer {
 
     private static final Logger logger = LoggerFactory.getLogger(ConsumerServer.class);
     private final KafkaConsumerWrapper kafkaConsumer;
     private final DatabaseService databaseService;
     private final EmailService emailService;
-    private final FileService fileService;
+    private  final SoapDownloadBinaryDV downloadFilesFromJSON;
     private final String topic;
     private final String server;
     private final int limitSelect;
     private final ExecutorService executor;
 
-    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, FileService fileService, ConfigLoader configLoader) {
+    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, SoapDownloadBinaryDV downloadFilesFromJSON, ConfigLoader configLoader) {
         this.kafkaConsumer = kafkaConsumer;
         this.databaseService = databaseService;
         this.emailService = emailService;
-        this.fileService = fileService;
+        this.downloadFilesFromJSON = downloadFilesFromJSON;
         this.topic = configLoader.getProperty("TOPIC");
         this.server = configLoader.getProperty("SERVER");
         this.limitSelect = Integer.parseInt(configLoader.getProperty("LIMIT_SELECT"));
@@ -52,14 +55,18 @@ public class ConsumerServer {
                 Future<?> future = executor.submit(() -> {
                     try {
                         result.setCaption(result.getId() + " " + result.getCaption());
-                        emailService.sendMessage(result, fileService); // --> Отправить сообщение - изменить если именяется обработка JSON
+                        StringBuilder sPath = SoapDownloadBinaryDV.downloadFilesFromJSON(result);
+                        emailService.sendMail(result.getTo(),result.getToCC(),result.getCaption(), result.getBody(), String.valueOf(sPath));
+                        deleteDirectory(result.getUuid());
                         databaseService.updateMessageStatusDate(topic, server, result.getId(), "send", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
-                    } catch (IOException | SQLException e) {
+                    } catch (SQLException e) {
                         try {
                             databaseService.updateMessageStatusDate(topic, server, result.getId(), "error", new Timestamp(System.currentTimeMillis())); // --> добавил подсчет попыток NUM_ATTEMPT
                         } catch (SQLException ex) {
                             throw new RuntimeException(ex);
                         }
+                        throw new RuntimeException(e);
+                    } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
                 });
@@ -94,9 +101,9 @@ public class ConsumerServer {
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
         DatabaseService databaseService = new DatabaseService(configLoader);
         EmailService emailService = new EmailService(configLoader);
-        FileService fileService = new FileService(configLoader);
+        SoapDownloadBinaryDV downloadFilesFromJSON = new SoapDownloadBinaryDV(configLoader);
 
-        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, fileService, configLoader);
+        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, downloadFilesFromJSON, configLoader);
         consumerServer.start();
     }
 }

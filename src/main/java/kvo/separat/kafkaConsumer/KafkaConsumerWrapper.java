@@ -22,6 +22,9 @@ public class KafkaConsumerWrapper {
         consumerProps.put(ConsumerConfig.GROUP_ID_CONFIG, configLoader.getProperty("GROUP_ID"));
         consumerProps.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         consumerProps.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
+        consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, configLoader.getProperty("fetch.max.bytes"));
+        consumerProps.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, configLoader.getProperty("max.partition.fetch.bytes"));
+        consumerProps.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, configLoader.getProperty("fetch.max.wait.ms"));
 
         this.consumer = new KafkaConsumer<>(consumerProps);
         this.topic = configLoader.getProperty("TOPIC");
