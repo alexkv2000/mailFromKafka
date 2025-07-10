@@ -27,6 +27,7 @@ public class ConsumerServer {
     private final String server;
     private final int limitSelect;
     private final ExecutorService executor;
+    private final String typeMes;
 
     public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, SoapDownloadBinaryDV downloadFilesFromJSON, ConfigLoader configLoader) {
         this.kafkaConsumer = kafkaConsumer;
@@ -36,6 +37,7 @@ public class ConsumerServer {
         this.topic = configLoader.getProperty("TOPIC");
         this.server = configLoader.getProperty("SERVER");
         this.limitSelect = Integer.parseInt(configLoader.getProperty("LIMIT_SELECT"));
+        this.typeMes = configLoader.getProperty("TYPE_MES");
         this.executor = Executors.newFixedThreadPool(Integer.parseInt(configLoader.getProperty("NUM_THREADS")));
     }
 
@@ -46,19 +48,19 @@ public class ConsumerServer {
 
         while (true) {
             recordList = getConsumerRecords();
-            databaseService.insertMessages(recordList, topic, server);
+            databaseService.insertMessages(recordList, server, typeMes);
 
-            databaseService.updateMessagesStatus(topic, server, "select", limitSelect);
-            resultSet = databaseService.selectMessages(topic, server, limitSelect);
+            databaseService.updateMessagesStatus(topic, server, "select", typeMes,limitSelect);
+            resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
             List<Future<?>> futures = new ArrayList<>();
             for (MessageData result : resultSet) {
                 Future<?> future = executor.submit(() -> {
                     try {
-                        result.setCaption(result.getId() + " " + result.getCaption());
+                        result.setCaption(result.getId() + " " + result.getCaption()); ///ToDo на ПРОДЕ закоментировать!!!
                         StringBuilder sPath = SoapDownloadBinaryDV.downloadFilesFromJSON(result);
                         emailService.sendMail(result.getTo(),result.getToCC(),result.getCaption(), result.getBody(), String.valueOf(sPath));
                         deleteDirectory(result.getUuid());
-                        databaseService.updateMessageStatusDate(topic, server, result.getId(), "send", new Timestamp(System.currentTimeMillis())); // --> Обновление статуса и времени отправки
+                        databaseService.updateMessageStatusDate(topic, server, result.getId(), "send", new Timestamp(System.currentTimeMillis()));
                     } catch (SQLException e) {
                         try {
                             databaseService.updateMessageStatusDate(topic, server, result.getId(), "error", new Timestamp(System.currentTimeMillis())); // --> добавил подсчет попыток NUM_ATTEMPT

@@ -8,5 +8,12 @@
       <jdbc-url>jdbc:sqlite:D:/DataBase/sql_kafka.s3db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
+    <data-source source="LOCAL" name="GAZ@DOCPROD" uuid="02255c8d-4c24-4094-971d-2696ea27530b">
+      <driver-ref>sqlserver.ms</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>com.microsoft.sqlserver.jdbc.SQLServerDriver</jdbc-driver>
+      <jdbc-url>jdbc:sqlserver://DOCPROD\SQLPROD:1433;database=GAZ</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
   </component>
 </project>
