@@ -2,6 +2,8 @@ package kvo.separat.kafkaConsumer;
 
 import kvo.separat.SoapDownloadBinaryDV;
 import static kvo.separat.SoapDownloadBinaryDV.deleteDirectory;
+
+import kvo.separat.mssql.MSSQLConnectionExample;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,23 +24,25 @@ public class ConsumerServer {
     private final KafkaConsumerWrapper kafkaConsumer;
     private final DatabaseService databaseService;
     private final EmailService emailService;
-    private  final SoapDownloadBinaryDV downloadFilesFromJSON;
+//    private  final SoapDownloadBinaryDV downloadFilesFromJSON;
     private final String topic;
     private final String server;
     private final int limitSelect;
     private final ExecutorService executor;
     private final String typeMes;
+    private final MSSQLConnectionExample mssqlConnectionExample;
 
-    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, SoapDownloadBinaryDV downloadFilesFromJSON, ConfigLoader configLoader) {
+    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, SoapDownloadBinaryDV downloadFilesFromJSON, MSSQLConnectionExample mssqlConnectionExample, ConfigLoader configLoader) {
         this.kafkaConsumer = kafkaConsumer;
         this.databaseService = databaseService;
         this.emailService = emailService;
-        this.downloadFilesFromJSON = downloadFilesFromJSON;
+//        this.downloadFilesFromJSON = downloadFilesFromJSON;
         this.topic = configLoader.getProperty("TOPIC");
         this.server = configLoader.getProperty("SERVER");
         this.limitSelect = Integer.parseInt(configLoader.getProperty("LIMIT_SELECT"));
         this.typeMes = configLoader.getProperty("TYPE_MES");
         this.executor = Executors.newFixedThreadPool(Integer.parseInt(configLoader.getProperty("NUM_THREADS")));
+        this.mssqlConnectionExample = mssqlConnectionExample;
     }
 
     public void start() throws SQLException {
@@ -57,6 +61,8 @@ public class ConsumerServer {
                 Future<?> future = executor.submit(() -> {
                     try {
                         result.setCaption(result.getId() + " " + result.getCaption()); ///ToDo на ПРОДЕ закоментировать!!!
+                        //TODO заменить на MSSQLConnectionExample
+                        // Передаем UUID получаем StringBuilder из path полный_путь_к_файлам
                         StringBuilder sPath = SoapDownloadBinaryDV.downloadFilesFromJSON(result);
                         emailService.sendMail(result.getTo(),result.getToCC(),result.getCaption(), result.getBody(), String.valueOf(sPath));
                         deleteDirectory(result.getUuid());
@@ -105,7 +111,8 @@ public class ConsumerServer {
         EmailService emailService = new EmailService(configLoader);
         SoapDownloadBinaryDV downloadFilesFromJSON = new SoapDownloadBinaryDV(configLoader);
 
-        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, downloadFilesFromJSON, configLoader);
+        MSSQLConnectionExample mssqlConnectionExample = new MSSQLConnectionExample(configLoader);
+        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, downloadFilesFromJSON, mssqlConnectionExample, configLoader);
         consumerServer.start();
     }
 }
