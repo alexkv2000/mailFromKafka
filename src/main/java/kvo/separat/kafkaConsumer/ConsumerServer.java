@@ -1,17 +1,19 @@
 package kvo.separat.kafkaConsumer;
 
-import kvo.separat.SoapDownloadBinaryDV;
-import static kvo.separat.SoapDownloadBinaryDV.deleteDirectory;
-
 import kvo.separat.mssql.MSSQLConnectionExample;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
@@ -24,15 +26,16 @@ public class ConsumerServer {
     private final KafkaConsumerWrapper kafkaConsumer;
     private final DatabaseService databaseService;
     private final EmailService emailService;
-//    private  final SoapDownloadBinaryDV downloadFilesFromJSON;
+    //    private  final SoapDownloadBinaryDV downloadFilesFromJSON;
     private final String topic;
     private final String server;
     private final int limitSelect;
     private final ExecutorService executor;
     private final String typeMes;
     private final MSSQLConnectionExample mssqlConnectionExample;
+    private final String file_Path;
 
-    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, SoapDownloadBinaryDV downloadFilesFromJSON, MSSQLConnectionExample mssqlConnectionExample, ConfigLoader configLoader) {
+    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, MSSQLConnectionExample mssqlConnectionExample, ConfigLoader configLoader) {
         this.kafkaConsumer = kafkaConsumer;
         this.databaseService = databaseService;
         this.emailService = emailService;
@@ -41,56 +44,124 @@ public class ConsumerServer {
         this.server = configLoader.getProperty("SERVER");
         this.limitSelect = Integer.parseInt(configLoader.getProperty("LIMIT_SELECT"));
         this.typeMes = configLoader.getProperty("TYPE_MES");
+        this.file_Path = configLoader.getProperty("FILE_PATH");
         this.executor = Executors.newFixedThreadPool(Integer.parseInt(configLoader.getProperty("NUM_THREADS")));
         this.mssqlConnectionExample = mssqlConnectionExample;
     }
 
-    public void start() throws SQLException {
-        databaseService.createTableIfNotExist();
+    public void start() {
+        try {
+            databaseService.createTableIfNotExist();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         List<ConsumerRecord<String, String>> recordList;
         List<MessageData> resultSet;
 
         while (true) {
-            recordList = getConsumerRecords();
-            databaseService.insertMessages(recordList, server, typeMes);
+            try {
+                recordList = getConsumerRecords();
 
-            databaseService.updateMessagesStatus(topic, server, "select", typeMes,limitSelect);
-            resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
-            List<Future<?>> futures = new ArrayList<>();
-            for (MessageData result : resultSet) {
-                Future<?> future = executor.submit(() -> {
+                AddCorrectDataJSONFromBrokerToDBSQL(recordList);
+
+                updateStatusDBSQL("select");
+
+                resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
+
+                if (resultSet == null || resultSet.isEmpty()) {
+                    logger.debug("Нет сообщений для обработки");
+                    continue;
+                }
+
+                List<Future<?>> futures = new ArrayList<>();
+
+                for (MessageData result : resultSet) {
                     try {
-                        result.setCaption(result.getId() + " " + result.getCaption()); ///ToDo на ПРОДЕ закоментировать!!!
-                        //TODO заменить на MSSQLConnectionExample
-                        // Передаем UUID получаем StringBuilder из path полный_путь_к_файлам
-                        StringBuilder sPath = SoapDownloadBinaryDV.downloadFilesFromJSON(result);
-                        emailService.sendMail(result.getTo(),result.getToCC(),result.getCaption(), result.getBody(), String.valueOf(sPath));
-                        deleteDirectory(result.getUuid());
-                        databaseService.updateMessageStatusDate(topic, server, result.getId(), "send", new Timestamp(System.currentTimeMillis()));
-                    } catch (SQLException e) {
-                        try {
-                            databaseService.updateMessageStatusDate(topic, server, result.getId(), "error", new Timestamp(System.currentTimeMillis())); // --> добавил подсчет попыток NUM_ATTEMPT
-                        } catch (SQLException ex) {
-                            throw new RuntimeException(ex);
+                        // Проверка данных сообщения перед обработкой
+                        if (result == null || result.getUuid() == null || (result.getTo() == null && result.getToCC() == null)) {
+                        // if (result == null || result.getUuid() == null || result.getTo() == null) {
+                            logger.error("Некорректные данные сообщения, пропускаем ID: " +
+                                    (result != null ? result.getId() : "null"));
+                            continue;
                         }
-                        throw new RuntimeException(e);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
+
+                        Future<?> future = executor.submit(() -> {
+                            try {
+                                result.setCaption(result.getId() + " " + result.getCaption());
+                                StringBuilder sPath = MSSQLConnectionExample.DownloadBinaryDV(result.getUuid());
+
+                                // Дополнительная проверка перед отправкой
+//                                 if (sPath == null || sPath.length() == 0) {
+//                                    throw new IOException("Не удалось получить файл по UUID: " + result.getUuid());
+//                                }
+
+                                emailService.sendMail(result.getTo(), result.getToCC(), result.getCaption(),
+                                        result.getBody(), String.valueOf(sPath));
+                                if (Files.exists(Path.of(file_Path + result.getUuid()))) {
+                                    MSSQLConnectionExample.deleteDirectory(result.getUuid());
+                                }
+                                databaseService.updateMessageStatusDate(topic, server, result.getId(),
+                                        "send", new Timestamp(System.currentTimeMillis()));
+                            } catch (SQLException e) {
+                                try {
+                                    databaseService.updateMessageStatusDate(topic, server, result.getId(),
+                                            "error", new Timestamp(System.currentTimeMillis()));
+                                } catch (SQLException ex) {
+                                    logger.error("Ошибка при обновлении статуса сообщения ID: " + result.getId(), ex);
+                                }
+                                logger.error("Ошибка при обработке сообщения ID: " + result.getId(), e);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+//                            catch (IOException e) {
+//                                logger.error("IO ошибка при обработке сообщения ID: " + result.getId(), e);
+//                            }
+                        });
+                        futures.add(future);
+                    } catch (Exception e) {
+                        logger.error("Ошибка при создании задачи для сообщения, пропускаем запись", e);
                     }
-                });
-                futures.add(future);
-            }
-            for (Future<?> future : futures) {
+                }
+
+                for (Future<?> future : futures) {
+                    try {
+                        future.get();
+                    } catch (Exception e) {
+                        logger.error("Ошибка при выполнении задачи", e);
+                    }
+                }
+
+            } catch (Exception e) {
+                logger.error("Ошибка в основном цикле обработки", e);
                 try {
-                    future.get(); // Блокируем до завершения задачи
-//TODO Удалить записи успешно отправленные и попытки которые превысили NUM_ATTEMPT
-                } catch (Exception e) {
-                    logger.info("Ошибка закачки данных по url");
-                    e.printStackTrace();
+                    Thread.sleep(5000);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    logger.error("Поток был прерван", ie);
+                    break;
                 }
             }
         }
     }
+
+    private void updateStatusDBSQL(String status) {
+        databaseService.updateMessagesForProcessing(topic, server, status, typeMes);
+    }
+
+    private void AddCorrectDataJSONFromBrokerToDBSQL(List<ConsumerRecord<String, String>> recordList) {
+        // Проверка корректности JSON перед вставкой в БД
+        for (ConsumerRecord<String, String> record : recordList) {
+            try {
+                // Проверяем валидность JSON
+                new JSONObject(record.value());
+            } catch (JSONException e) {
+                logger.error("Некорректный JSON в сообщении, пропускаем: " + record.value());
+                continue; // Пропускаем некорректные сообщения
+            }
+            databaseService.insertMessages(Collections.singletonList(record), server, typeMes);
+        }
+    }
+
 
     private List<ConsumerRecord<String, String>> getConsumerRecords() {
         List<ConsumerRecord<String, String>> recordList;
@@ -109,10 +180,10 @@ public class ConsumerServer {
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
         DatabaseService databaseService = new DatabaseService(configLoader);
         EmailService emailService = new EmailService(configLoader);
-        SoapDownloadBinaryDV downloadFilesFromJSON = new SoapDownloadBinaryDV(configLoader);
+//        new SoapDownloadBinaryDV(configLoader);
 
         MSSQLConnectionExample mssqlConnectionExample = new MSSQLConnectionExample(configLoader);
-        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, downloadFilesFromJSON, mssqlConnectionExample, configLoader);
+        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, mssqlConnectionExample, configLoader);
         consumerServer.start();
     }
 }

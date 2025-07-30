@@ -1,7 +1,6 @@
 package kvo.separat.kafkaConsumer;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,8 +65,10 @@ public class DatabaseService {
             logger.error("Error inserting messages into database", e);
         }
     }
-
-    public void updateMessagesStatus(String topic, String server, String status, String typeMessage, int limitSelect) {
+    public void updateMessagesForProcessing(String topic, String server, String status, String typeMessage){
+        updateMessagesForProcessing(topic, server, status, typeMessage, 100);
+    }
+    public void updateMessagesForProcessing(String topic, String server, String status, String typeMessage, int limitSelect) {
         String[] types = typeMessage.split(",");
         String placeholders = String.join(",", Collections.nCopies(types.length, "?"));
         String updateSQL = "UPDATE messages SET status = ?, server = ? WHERE id in (SELECT id FROM messages WHERE status IS NULL AND kafka_topic = ? AND server = ? AND typeMes IN(" + placeholders + ") LIMIT ?)";
@@ -129,32 +130,22 @@ public class DatabaseService {
     }
 
     MessageData convertResultSetToMessageData(ResultSet resultSet) throws SQLException {
-        String fileName;
-        String message = resultSet.getString("message");
-        JSONObject jsonMessage = new JSONObject(message);
+        try {
+            String fileName;
+            String message = resultSet.getString("message");
+            JSONObject jsonMessage = new JSONObject(message);
 
-        String to = jsonMessage.optString("To", "");
-        String toCC = jsonMessage.optString("ToСС", "");
-        String caption = jsonMessage.optString("Caption", "Информация от сужбы DocsVision");
-        String body = jsonMessage.optString("Body", "");
-        UUID uuid = UUID.fromString(jsonMessage.optString("uuid", ""));
+            String to = jsonMessage.optString("To", "");
+            String toCC = jsonMessage.optString("ToCC", "");
+            String caption = jsonMessage.optString("Caption", "Информация от службы DocsVision");
+            String body = jsonMessage.optString("Body", "");
+            UUID uuid = UUID.fromString(jsonMessage.optString("uuid", ""));
 
-        JSONObject urlFiles = new JSONObject(); // Создаем объект для хранения файлов
-
-        if (jsonMessage.has("Url") && !jsonMessage.isNull("Url")) {
-            JSONObject urlsObj = jsonMessage.getJSONObject("Url");
-
-            // Получаем все ключи (имена файлов) из объекта Url
-            Iterator<String> keys = urlsObj.keys();
-
-            while (keys.hasNext()) {
-                fileName = keys.next();
-                String fileContent = urlsObj.getString(fileName);
-                urlFiles.put(fileName, fileContent);
-            }
+            return new MessageData(resultSet.getInt("id"), to, toCC, caption, body, /*urlFiles,*/ uuid);
+        } catch (Exception e) {
+            System.err.println("Ошибка при конвертации (JSON) ResultSet в MessageData: " + e.getMessage());
+            throw new SQLException("Ошибка при конвертации (JSON) ResultSet в MessageData ", e);
         }
-
-        return new MessageData(resultSet.getInt("id"), to, toCC, caption, body, urlFiles, uuid);
     }
 
     public List<MessageData> selectMessages(String topic, String server, String typeMessage ,int limitSelect) {
@@ -183,7 +174,7 @@ public class DatabaseService {
 
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 while (resultSet.next()) {
-                    aListMessage.add(convertResultSetToMessageData(resultSet)); //-> если кто-то добавит текст (НЕ JSON) просто закоментировать эту строку, потом вернуть.
+                         aListMessage.add(convertResultSetToMessageData(resultSet)); //-> если кто-то добавит текст (НЕ JSON) просто закоментировать эту строку, потом вернуть.
                 }
                 return aListMessage;
             }

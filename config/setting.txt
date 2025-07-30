@@ -1,6 +1,6 @@
 TOPIC=topicDVMessage
 BROKER=172.18.8.60:9092,172.18.2.198:9092
-GROUP_ID=consumer-java-sender
+GROUP_ID=consumer-java-sender_dev
 SMTP_SERVER=email.itsnn.ru
 EMAIL=DVWorkflow@gaz.ru
 PASSWORD=!_Dwkflw17
@@ -8,8 +8,8 @@ FILE_PATH=c:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\
 NUM_THREADS=15
 NUM_ATTEMPT=5
 LIMIT_SELECT=100
-SERVER=doc-test
-TYPE_MES=1912,1909
+SERVER=doc-test_dev
+TYPE_MES=1912
 
 DB_PATH=D:/DataBase/sql_kafka.s3db
 

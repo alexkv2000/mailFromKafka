@@ -66,7 +66,9 @@ public class EmailService {
         try {
             Message message = new MimeMessage(session);
             message.setFrom(new InternetAddress(email));
-            message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
+            if (to != null && !to.isEmpty()) {
+                message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(to));
+            }
             if (toCC != null && !toCC.isEmpty()) {
                 message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(toCC));
             }
@@ -75,7 +77,7 @@ public class EmailService {
             MimeMultipart multipart = new MimeMultipart();
 
             MimeBodyPart textPart = new MimeBodyPart();
-            textPart.setText(body);
+            textPart.setContent(body, "text/html; charset=UTF-8");
             multipart.addBodyPart(textPart);
 
             if (filePaths != null && !filePaths.isEmpty()) {

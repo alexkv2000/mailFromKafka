@@ -30,50 +30,6 @@ public class SoapDownloadBinaryDV {
     public SoapDownloadBinaryDV(ConfigLoader configLoader) {
         filePath = configLoader.getProperty("FILE_PATH");
     }
-
-    public static StringBuilder downloadFilesFromJSON(MessageData messageData) throws IOException {
-        StringBuilder pathFiles = new StringBuilder();
-
-
-        // Проверяем наличие данных в MessageData
-        if (messageData == null || messageData.getUrls() == null) {
-            System.err.println("MessageData или Urls отсутствуют");
-            return pathFiles;
-        }
-
-        JSONObject urlsObj = messageData.getUrls();
-        Iterator<String> keys = urlsObj.keys();
-
-        // Создаем директорию для UUID, если он есть
-        String uuid = messageData.has("uuid") ? String.valueOf(messageData.getUuid()) : "no_uuid";
-        Path targetDir = Path.of(filePath, uuid);
-        Files.createDirectories(targetDir);
-
-        // Обрабатываем все вложения
-        while (keys.hasNext()) {
-            String fileName = keys.next();
-            try {
-                // Получаем содержимое файла в base64
-                String base64Content = urlsObj.getString(fileName);
-
-                // Декодируем из base64 в байты
-                byte[] fileBytes = Base64.getDecoder().decode(base64Content);
-
-                // Сохраняем файл
-                Path filePathFull = targetDir.resolve(fileName);
-                Files.write(filePathFull, fileBytes);
-
-                // Добавляем путь к результату
-                pathFiles.append(filePathFull.toString()).append(", ");
-
-            } catch (Exception e) {
-                System.err.println("Ошибка обработки файла " + fileName + ": " + e.getMessage());
-            }
-        }
-
-        return pathFiles;
-    }
-
     public static void deleteDirectory(UUID uuid) {
         deleteDirectoryRecurs(Path.of(filePath + uuid));
         logger.info("Deleted directory success: " + filePath + uuid);

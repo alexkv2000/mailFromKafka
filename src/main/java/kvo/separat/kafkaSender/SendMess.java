@@ -11,7 +11,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 public class SendMess {
-    static final int count = 2;
+    static final int count = 20;
 
     public static void main(String[] args) {
         String startDate = LocalTime.now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));

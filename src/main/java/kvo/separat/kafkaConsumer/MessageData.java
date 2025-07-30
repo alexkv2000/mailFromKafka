@@ -9,16 +9,16 @@ public class MessageData {
     private final String toCC;
     private String caption;
     private final String body;
-    private final JSONObject urls;
+ //   private final JSONObject urls;
     private final UUID uuid;
 
-    public MessageData(int id, String to, String toCC, String caption, String body, JSONObject urls, UUID uuid) {
+    public MessageData(int id, String to, String toCC, String caption, String body, /*JSONObject urls,*/ UUID uuid) {
         this.id = id;
         this.to = to;
         this.toCC = toCC;
         this.caption = caption;
         this.body = body;
-        this.urls = urls;
+ //       this.urls = urls;
         this.uuid = uuid;
     }
 
@@ -46,9 +46,9 @@ public class MessageData {
         return body;
     }
 
-    public JSONObject getUrls() {
-        return urls;
-    }
+//    public JSONObject getUrls() {
+//        return urls;
+//    }
 
     public UUID getUuid() {
         return uuid;
