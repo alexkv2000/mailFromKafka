@@ -131,7 +131,7 @@ public class DatabaseService {
 
     MessageData convertResultSetToMessageData(ResultSet resultSet) throws SQLException {
         try {
-            String fileName;
+//            String fileName;
             String message = resultSet.getString("message");
             JSONObject jsonMessage = new JSONObject(message);
 

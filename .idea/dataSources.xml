@@ -5,7 +5,7 @@
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:D:/DataBase/sql_kafka.s3db</jdbc-url>
+      <jdbc-url>jdbc:sqlite:\\\\doc-test\\DataBase\\sql_kafka.s3db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
     <data-source source="LOCAL" name="GAZ@DOCPROD" uuid="02255c8d-4c24-4094-971d-2696ea27530b">
