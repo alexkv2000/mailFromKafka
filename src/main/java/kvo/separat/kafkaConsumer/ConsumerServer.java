@@ -258,11 +258,13 @@ public class ConsumerServer {
             try {
                 // Проверяем валидность JSON
                 new JSONObject(record.value());
+                databaseService.insertMessages(Collections.singletonList(record), server, typeMes);
             } catch (JSONException e) {
                 logger.error("Некорректный JSON в сообщении, пропускаем: " + record.value());
-                continue; // TODO Пропускаем некорректные сообщения? можно их удалять или ставить Error
+                String recordId = record.key();
+                databaseService.updateMessagesForProcessing(topic, server, "****" , Collections.singletonList(recordId).toString()); // Пропускаем некорректные сообщения, ставим Error
+                //continue;
             }
-            databaseService.insertMessages(Collections.singletonList(record), server, typeMes);
         }
     }
 
@@ -279,13 +281,11 @@ public class ConsumerServer {
     public static void main(String[] args) throws IOException {
         String currentDir = System.getProperty("user.dir");
         String configPath = currentDir + "\\config\\setting.txt";
-        ConfigLoader configLoader = new ConfigLoader(configPath);
 
+        ConfigLoader configLoader = new ConfigLoader(configPath);
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
         DatabaseService databaseService = new DatabaseService(configLoader);
         EmailService emailService = new EmailService(configLoader);
-//        new SoapDownloadBinaryDV(configLoader);
-
         MSSQLConnectionExample mssqlConnectionExample = new MSSQLConnectionExample(configLoader);
         ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, mssqlConnectionExample, configLoader);
 
