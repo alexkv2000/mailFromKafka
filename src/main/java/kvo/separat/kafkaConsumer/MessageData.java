@@ -1,28 +1,28 @@
 package kvo.separat.kafkaConsumer;
 
-import org.json.JSONObject;
 import java.util.UUID;
 
 public class MessageData {
-    private final int id;
+    private final Integer id;
     private final String to;
     private final String toCC;
+
+    private final String BCC;
     private String caption;
     private final String body;
- //   private final JSONObject urls;
     private final UUID uuid;
 
-    public MessageData(int id, String to, String toCC, String caption, String body, /*JSONObject urls,*/ UUID uuid) {
+    public MessageData(int id, String to, String toCC, String bCC, String caption, String body, /*JSONObject urls,*/ UUID uuid) {
         this.id = id;
         this.to = to;
         this.toCC = toCC;
+        this.BCC = bCC;
         this.caption = caption;
         this.body = body;
- //       this.urls = urls;
         this.uuid = uuid;
     }
 
-    public int getId() {
+    public Integer getId() {
         return id;
     }
 
@@ -33,7 +33,9 @@ public class MessageData {
     public String getToCC() {
         return toCC;
     }
-
+    public String getBCC() {
+        return BCC;
+    }
     public String getCaption() {
         return caption;
     }
@@ -45,10 +47,6 @@ public class MessageData {
     public String getBody() {
         return body;
     }
-
-//    public JSONObject getUrls() {
-//        return urls;
-//    }
 
     public UUID getUuid() {
         return uuid;

@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
@@ -49,7 +50,6 @@ public class ConsumerServer {
         this.executor = Executors.newFixedThreadPool(Integer.parseInt(configLoader.getProperty("NUM_THREADS")));
         this.mssqlConnectionExample = mssqlConnectionExample;
     }
-    // Создаем ScheduledExecutorService для периодического выполнения
 
     public void startProcessing() {
         // Запускаем задачу с фиксированной задержкой между выполнениями
@@ -59,10 +59,10 @@ public class ConsumerServer {
     private void processMessages() {
         try {
             List<ConsumerRecord<String, String>> recordList = getConsumerRecords();
-            AddCorrectDataJSONFromBrokerToDBSQL(recordList);
+            AddCorrectDataJSONFromBrokerToDBSQL(recordList); //проверка структуры JSON
 
-            updateStatusDBSQL("select");
-            List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
+            updateStatusDBSQL("select"); //забронировали данные для отбработки
+            List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect); //берем забронированные данные в работу и данные с ошибкой кол-во попыток < NUM_ATTEMPT
 
             if (resultSet == null || resultSet.isEmpty()) {
                 logger.debug("Нет сообщений для обработки");
@@ -75,9 +75,10 @@ public class ConsumerServer {
                 if (!isValidMessage(result)) {
                     logger.error("Некорректные данные сообщения, пропускаем ID: {}",
                             result != null ? result.getId() : "null");
+                    databaseService.updateMessageStatusDate(topic, server, result.getId(), "error DATA JSON", new Timestamp(System.currentTimeMillis()));
                     continue;
-                }
 
+                }
                 futures.add(processSingleMessageAsync(result));
             }
 
@@ -101,8 +102,7 @@ public class ConsumerServer {
 
                 // Основная логика обработки
                 StringBuilder sPath = MSSQLConnectionExample.DownloadBinaryDV(result.getUuid());
-                emailService.sendMail(result.getTo(), result.getToCC(), result.getCaption(),
-                        result.getBody(), String.valueOf(sPath));
+                emailService.sendMail(result.getTo(), result.getToCC(), result.getBCC(), result.getCaption(), result.getBody(), String.valueOf(sPath));
 
                 // Очистка временных файлов
                 if (Files.exists(Path.of(file_Path + result.getUuid()))) {
@@ -199,7 +199,7 @@ public class ConsumerServer {
                                 result.setCaption(result.getId() + " " + result.getCaption()); //TODO удалить строку перед внедрением на ПРОД
                                 StringBuilder sPath = MSSQLConnectionExample.DownloadBinaryDV(result.getUuid());
 
-                                emailService.sendMail(result.getTo(), result.getToCC(), result.getCaption(),
+                                emailService.sendMail(result.getTo(), result.getToCC(), result.getBCC(), result.getCaption(),
                                         result.getBody(), String.valueOf(sPath));
                                 if (Files.exists(Path.of(file_Path + result.getUuid()))) {
                                     MSSQLConnectionExample.deleteDirectory(result.getUuid());
@@ -251,23 +251,19 @@ public class ConsumerServer {
     private void updateStatusDBSQL(String status) {
         databaseService.updateMessagesForProcessing(topic, server, status, typeMes);
     }
-
+    // Проверка корректности JSON перед вставкой в БД
     private void AddCorrectDataJSONFromBrokerToDBSQL(List<ConsumerRecord<String, String>> recordList) {
-        // Проверка корректности JSON перед вставкой в БД
+
         for (ConsumerRecord<String, String> record : recordList) {
             try {
                 // Проверяем валидность JSON
                 new JSONObject(record.value());
-                databaseService.insertMessages(Collections.singletonList(record), server, typeMes);
+                databaseService.insertMessages(Collections.singletonList(record), typeMes); //параметр 'server'="" (не передается)
             } catch (JSONException e) {
                 logger.error("Некорректный JSON в сообщении, пропускаем: " + record.value());
-                String recordId = record.key();
-                databaseService.updateMessagesForProcessing(topic, server, "****" , Collections.singletonList(recordId).toString()); // Пропускаем некорректные сообщения, ставим Error
-                //continue;
             }
         }
     }
-
 
     private List<ConsumerRecord<String, String>> getConsumerRecords() {
         List<ConsumerRecord<String, String>> recordList;

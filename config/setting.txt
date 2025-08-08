@@ -11,8 +11,9 @@ LIMIT_SELECT=100
 SERVER=doc-test_dev
 TYPE_MES=1912
 
-DB_PATH=\\\\doc-test\\DataBase\\sql_kafka.s3db
-
+DB_PATH=jdbc:mysql://doc-test:3306/sql-kafka
+USER_SQL=root
+PASSWORD_SQL=MySQLP@%%W)RD
 
 fetch.max.bytes=2147483647
 max.partition.fetch.bytes=2147483647

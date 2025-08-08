@@ -50,7 +50,7 @@ public class EmailService {
 //
 //    }
 
-    public void sendMail(String to, String toCC, String caption, String body, String filePaths) {
+    public void sendMail(String to, String toCC, String BCC, String caption, String body, String filePaths) {
         Properties props = new Properties();
         props.put("mail.smtp.auth", "true");
         props.put("mail.smtp.starttls.enable", "true");
@@ -71,6 +71,9 @@ public class EmailService {
             }
             if (toCC != null && !toCC.isEmpty()) {
                 message.setRecipients(Message.RecipientType.CC, InternetAddress.parse(toCC));
+            }
+            if (BCC != null && !BCC.isEmpty()) {
+                message.setRecipients(Message.RecipientType.BCC, InternetAddress.parse(BCC));
             }
             message.setSubject(caption);
 
