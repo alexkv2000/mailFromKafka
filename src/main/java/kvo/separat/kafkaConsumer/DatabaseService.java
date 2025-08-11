@@ -56,7 +56,7 @@ public class DatabaseService {
         insertMessages(records, "", typeMessage);
     }
 
-    public void insertMessages(List<ConsumerRecord<String, String>> records, String server, String typeMessage)  {
+    public void insertMessages(List<ConsumerRecord<String, String>> records, String server, String typeMessage) {
         String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create, server, typeMes) VALUES (?, ?, ?, ?, ?)";
         try (Connection connection = getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(insertSQL)) {
@@ -75,13 +75,29 @@ public class DatabaseService {
         }
     }
 
+
+
+    public void repeatSend(Integer messageId) {
+        updateParametersMessage(messageId, 0);
+    }
+
+    public void updateParametersMessage(Integer messageId, Integer NUM_ATTEMPT){
+        String updateSQL = "UPDATE messages m SET m.status = NULL, m.data_end = NULL m.NUM_ATTEMPT = " + NUM_ATTEMPT.toString() + " WHERE m.id = " + messageId.toString() + ";";
+        try (Connection connection = getConnection();
+             PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
+            updateStatement.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("Error updating messages status in database", e);
+        }
+    }
+
     public void updateMessagesForProcessing(String topic, String server, String status, String typeMessage) {
         updateMessagesForProcessing(topic, server, status, typeMessage, 100);
     }
 
     public void updateMessagesForProcessing(String topic, String server, String status, String typeMessage, int limitSelect) {
         String[] types = typeMessage.split(",");
-        String placeholders = String.join(",", Collections.nCopies(types.length, "?"));
+//        String placeholders = String.join(",", Collections.nCopies(types.length, "?"));
 //        String updateSQL = "UPDATE messages SET status = ?, server = ? WHERE id in (SELECT id FROM messages WHERE status IS NULL AND kafka_topic = ? AND server = ? AND typeMes IN(" + placeholders + ") LIMIT ?)";
         String updateSQL = "UPDATE messages m1 JOIN (SELECT id FROM messages WHERE status IS NULL AND server = ? AND kafka_topic = ? AND typeMes IN (?) LIMIT ?) m2 ON m1.id = m2.id SET m1.status = ?, m1.server = ?;";
         try (Connection connection = getConnection();
@@ -171,7 +187,7 @@ public class DatabaseService {
             id_ = resultSet.getInt("id");
             String to = jsonMessage.optString("To", "");
             String toCC = jsonMessage.optString("ToCC", "");
-            String caption = jsonMessage.optString("Caption", "Информация от службы DocsVision");
+//            String caption = jsonMessage.optString("Caption", "Информация от службы DocsVision");
             String body = jsonMessage.optString("Body", "");
             if (to.isEmpty() && toCC.isEmpty() || body.isEmpty()) {
                 return id_;
@@ -224,7 +240,7 @@ public class DatabaseService {
             logger.error("Error processing messages from database", e);
         }
         //Обновим статус записи с ошибкой внутри JSON
-        for (Integer id: id_error) {
+        for (Integer id : id_error) {
             try {
                 updateMessageStatusDate(topic, server, id, "error", new Timestamp(System.currentTimeMillis()));
             } catch (SQLException e) {
