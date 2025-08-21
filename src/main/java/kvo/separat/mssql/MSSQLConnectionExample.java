@@ -182,7 +182,7 @@ public class MSSQLConnectionExample {
         ConfigLoader configLoader = new ConfigLoader(configPath);
         MSSQLConnectionExample mssqlConnectionExample = new MSSQLConnectionExample(configLoader);
         try {
-//            Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+            Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
             connection = DriverManager.getConnection(mssqlConnectionExample.URL, mssqlConnectionExample.USER, mssqlConnectionExample.PASSWORD);
             connection.setAutoCommit(false);
 
@@ -225,7 +225,7 @@ public class MSSQLConnectionExample {
 
         } catch (SQLException e) {
             System.err.println("Ошибка SQL / закрытии ресурсов: " + e.getMessage());
-        } catch (IOException e) {
+        } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         } finally {
             try {

@@ -16,6 +16,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -77,15 +78,12 @@ public class ConsumerServer {
                             result != null ? result.getId() : "null");
                     databaseService.updateMessageStatusDate(topic, server, result.getId(), "error DATA JSON", new Timestamp(System.currentTimeMillis()));
                     continue;
-
                 }
                 futures.add(processSingleMessageAsync(result));
             }
-
             waitForFuturesCompletion(futures);
-
         } catch (Exception e) {
-            logger.error("Критическая ошибка в процессе обработки", e); // В этом подходе не нужно sleep, так как scheduleWithFixedDelay уже управляет интервалами
+            logger.error("Критическая ошибка в процессе обработки", e); //не нужен sleep, scheduleWithFixedDelay сам управляет интервалами
         }
     }
 
@@ -98,7 +96,7 @@ public class ConsumerServer {
         return executor.submit(() -> {
             try {
                 // TODO Временная модификация (удалить в продакшене)
-                result.setCaption(result.getId() + " " + result.getCaption());
+//                result.setCaption(result.getId() + " " + result.getCaption());
 
                 // Основная логика обработки
                 StringBuilder sPath = MSSQLConnectionExample.DownloadBinaryDV(result.getUuid());
@@ -159,11 +157,11 @@ public class ConsumerServer {
 
     public void start() {
 
-        try {
-            databaseService.createTableIfNotExist();
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
+//        try {
+//            databaseService.createTableIfNotExist();
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
         List<ConsumerRecord<String, String>> recordList;
         List<MessageData> resultSet;
 
@@ -196,7 +194,7 @@ public class ConsumerServer {
 
                         Future<?> future = executor.submit(() -> {
                             try {
-                                result.setCaption(result.getId() + " " + result.getCaption()); //TODO удалить строку перед внедрением на ПРОД
+//                                result.setCaption(result.getId() + " " + result.getCaption()); //TODO удалить строку перед внедрением на ПРОД
                                 StringBuilder sPath = MSSQLConnectionExample.DownloadBinaryDV(result.getUuid());
 
                                 emailService.sendMail(result.getTo(), result.getToCC(), result.getBCC(), result.getCaption(),
@@ -278,6 +276,20 @@ public class ConsumerServer {
         String currentDir = System.getProperty("user.dir");
         String configPath = currentDir + "\\config\\setting.txt";
 
+        //Проверка параметров запуска
+        boolean useWhileLoop = false;
+        for (String arg : args) {
+            if (arg.startsWith("config.path=")) {
+                configPath = arg.substring("config.path=".length());
+                continue;
+            }
+            if (arg.startsWith("while=")) {
+                 useWhileLoop = arg.substring("while=".length()).equals("true");
+            }
+        }
+        logger.info("Запуск в режиме: {}", useWhileLoop ? "While-Loop" : "Scheduled");
+        //
+
         ConfigLoader configLoader = new ConfigLoader(configPath);
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
         DatabaseService databaseService = new DatabaseService(configLoader);
@@ -285,9 +297,13 @@ public class ConsumerServer {
         MSSQLConnectionExample mssqlConnectionExample = new MSSQLConnectionExample(configLoader);
         ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, mssqlConnectionExample, configLoader);
 
-        boolean useWhileLoop = args.length > 0 && "while=true".equalsIgnoreCase(args[0]);
-        logger.info("Запуск в режиме: {}", useWhileLoop ? "While-Loop" : "Scheduled");
-
+        //Создать таблицу если не существует
+//        try {
+//            databaseService.createTableIfNotExist();
+//        } catch (SQLException e) {
+//            throw new RuntimeException(e);
+//        }
+        //
         // Регистрация обработчика Ctrl+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             logger.info("Получен сигнал завершения (Ctrl+C)");
@@ -305,14 +321,14 @@ public class ConsumerServer {
             }
             logger.info("Приложение корректно завершено");
         }));
-
+        //
         // Запуск соответствующего режима
         if (useWhileLoop) {
             consumerServer.start(); // Бесконечный цикл while
         } else {
             consumerServer.startProcessing(); // Стандартный режим
         }
-
+        //
         // Ожидание завершения (для while-loop режима)
         if (useWhileLoop) {
             while (!Thread.currentThread().isInterrupted()) {
@@ -324,5 +340,6 @@ public class ConsumerServer {
                 }
             }
         }
+        //
     }
 }

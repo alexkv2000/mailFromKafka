@@ -5,6 +5,7 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.lang.model.type.NullType;
 import java.sql.*;
 import java.util.*;
 
@@ -82,7 +83,7 @@ public class DatabaseService {
     }
 
     public void updateParametersMessage(Integer messageId, Integer NUM_ATTEMPT){
-        String updateSQL = "UPDATE messages m SET m.status = NULL, m.data_end = NULL m.NUM_ATTEMPT = " + NUM_ATTEMPT.toString() + " WHERE m.id = " + messageId.toString() + ";";
+        String updateSQL = "UPDATE messages m SET m.status = NULL, m.date_end = NULL, m.server = '', m.NUM_ATTEMPT = " + NUM_ATTEMPT.toString() + " WHERE m.id = " + messageId.toString() + ";";
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
             updateStatement.executeUpdate();

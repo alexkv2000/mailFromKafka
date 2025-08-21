@@ -1,5 +1,5 @@
 TOPIC=topicDVMessage
-BROKER=172.18.8.60:9092,172.18.2.198:9092
+BROKER=72.18.2.53:9092,172.18.2.213:9092,172.18.2.198:9092
 GROUP_ID=consumer-java-sender
 SMTP_SERVER=email.itsnn.ru
 EMAIL=DVWorkflow@gaz.ru
@@ -11,9 +11,15 @@ LIMIT_SELECT=100
 SERVER=doc-test_dev
 TYPE_MES=1912
 
+DRIVER_MYSQL=com.mysql.cj.jdbc.Driver
 DB_PATH=jdbc:mysql://doc-test:3306/sql-kafka
 USER_SQL=root
 PASSWORD_SQL=MySQLP@%%W)RD
+
+DRIVER_MSSQL=com.microsoft.sqlserver.jdbc.SQLServerDriver
+URL_MSSQL=jdbc:sqlserver://docprod\sqlprod;databaseName=GAZ;encrypt=false;trustServerCertificate=true;
+USER_MSSQL=DVSQL
+PASSWORD_MSSQL=DV_Cthdbc14@
 
 fetch.max.bytes=2147483647
 max.partition.fetch.bytes=2147483647
