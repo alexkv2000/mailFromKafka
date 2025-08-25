@@ -5,7 +5,6 @@ import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.lang.model.type.NullType;
 import java.sql.*;
 import java.util.*;
 
@@ -91,6 +90,7 @@ public class DatabaseService {
             logger.error("Error updating messages status in database", e);
         }
     }
+
 
     public void updateMessagesForProcessing(String topic, String server, String status, String typeMessage) {
         updateMessagesForProcessing(topic, server, status, typeMessage, 100);

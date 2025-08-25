@@ -1,6 +1,7 @@
 package kvo.separat.kafkaConsumer;
 
-import kvo.separat.mssql.MSSQLConnectionExample;
+import kvo.separat.mssql.MSSQLConnection;
+import kvo.separat.kafkaConsumer.ConfigLoader;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -10,13 +11,11 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -34,11 +33,14 @@ public class ConsumerServer {
     private final int limitSelect;
     private static ExecutorService executor;
     private final String typeMes;
-    private final MSSQLConnectionExample mssqlConnectionExample;
     private final String file_Path;
+    private static String htread_sleep;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final String URL_MSSQL;
+    private static String USER_MSSQL;
+    private static String PASSWORD_MSSQL;
 
-    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, MSSQLConnectionExample mssqlConnectionExample, ConfigLoader configLoader) {
+    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, ConfigLoader configLoader) {
         this.kafkaConsumer = kafkaConsumer;
         this.databaseService = databaseService;
         this.emailService = emailService;
@@ -49,20 +51,46 @@ public class ConsumerServer {
         this.typeMes = configLoader.getProperty("TYPE_MES");
         this.file_Path = configLoader.getProperty("FILE_PATH");
         this.executor = Executors.newFixedThreadPool(Integer.parseInt(configLoader.getProperty("NUM_THREADS")));
-        this.mssqlConnectionExample = mssqlConnectionExample;
+        htread_sleep = configLoader.getProperty("THREAD_SLEEP");
+        this.URL_MSSQL = configLoader.getProperty("URL_MSSQL");
+        this.USER_MSSQL = configLoader.getProperty("USER_MSSQL");
+        this.PASSWORD_MSSQL = configLoader.getProperty("PASSWORD_MSSQL");
     }
 
     public void startProcessing() {
-        // Запускаем задачу с фиксированной задержкой между выполнениями
-        scheduler.scheduleWithFixedDelay(this::processMessages, 0, 5, TimeUnit.SECONDS);
-    }
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2); //запускаем 2 потока
 
+        scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                this.processMessages();
+            } catch (Exception e) {
+                logger.error("Error in processMessages", e);
+            }
+        }, 0, 5, TimeUnit.SECONDS);
+
+        scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                this.setKafkaConsumer();
+            } catch (Exception e) {
+                logger.error("Error in setKafkaConsumer", e);
+            }
+        }, 0, 5, TimeUnit.SECONDS);
+    }
+    private void setKafkaConsumer(){
+        logger.info("Start setKafkaConsumer : getConsumerRecords() =>");
+        List<ConsumerRecord<String, String>> recordList = getConsumerRecords();
+        logger.info("Start setKafkaConsumer (проверка структуры JSON) : AddCorrectDataJSONFromBrokerToDBSQL() => ");
+        AddCorrectDataJSONFromBrokerToDBSQL(recordList); //проверка структуры JSON
+    }
     private void processMessages() {
         try {
-            List<ConsumerRecord<String, String>> recordList = getConsumerRecords();
-            AddCorrectDataJSONFromBrokerToDBSQL(recordList); //проверка структуры JSON
-
-            updateStatusDBSQL("select"); //забронировали данные для отбработки
+//            logger.info("Start processMessages : getConsumerRecords() =>");
+//            List<ConsumerRecord<String, String>> recordList = getConsumerRecords();
+//            logger.info("Start processMessages (проверка структуры JSON) : AddCorrectDataJSONFromBrokerToDBSQL() => ");
+//            AddCorrectDataJSONFromBrokerToDBSQL(recordList); //проверка структуры JSON
+            logger.info("Start processMessages (забронировали данные для отбработки) : updateMessagesForProcessing() => ");
+            databaseService.updateMessagesForProcessing(topic, server,"select", typeMes, limitSelect); //забронировали данные для отбработки
+            logger.info("Start processMessages (берем забронированные данные в работу и данные с ошибкой кол-во попыток < NUM_ATTEMPT) : selectMessages() => ");
             List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect); //берем забронированные данные в работу и данные с ошибкой кол-во попыток < NUM_ATTEMPT
 
             if (resultSet == null || resultSet.isEmpty()) {
@@ -71,16 +99,20 @@ public class ConsumerServer {
             }
 
             List<Future<?>> futures = new ArrayList<>();
-
+            logger.info("Start processMessages (проверка записей resultSet) : for (MessageData result : resultSet) => ");
             for (MessageData result : resultSet) {
+                logger.info("Start processMessages (проверка записей resultSet) : isValidMessage() => ");
                 if (!isValidMessage(result)) {
                     logger.error("Некорректные данные сообщения, пропускаем ID: {}",
                             result != null ? result.getId() : "null");
+                    logger.info("Вызов processMessages.updateMessageStatusDate => ");
                     databaseService.updateMessageStatusDate(topic, server, result.getId(), "error DATA JSON", new Timestamp(System.currentTimeMillis()));
                     continue;
                 }
+                logger.info("Start processMessages (подготовка / отправка сообщения) : processSingleMessageAsync() => ");
                 futures.add(processSingleMessageAsync(result));
             }
+            logger.info("Start processMessages (ожидение отправки всех сообщений) : waitForFuturesCompletion() => ");
             waitForFuturesCompletion(futures);
         } catch (Exception e) {
             logger.error("Критическая ошибка в процессе обработки", e); //не нужен sleep, scheduleWithFixedDelay сам управляет интервалами
@@ -99,15 +131,17 @@ public class ConsumerServer {
 //                result.setCaption(result.getId() + " " + result.getCaption());
 
                 // Основная логика обработки
-                StringBuilder sPath = MSSQLConnectionExample.DownloadBinaryDV(result.getUuid());
+
+                StringBuilder sPath = MSSQLConnection.DownloadBinaryDV(result.getUuid(), URL_MSSQL, USER_MSSQL , PASSWORD_MSSQL, file_Path);
                 emailService.sendMail(result.getTo(), result.getToCC(), result.getBCC(), result.getCaption(), result.getBody(), String.valueOf(sPath));
 
                 // Очистка временных файлов
                 if (Files.exists(Path.of(file_Path + result.getUuid()))) {
-                    MSSQLConnectionExample.deleteDirectory(result.getUuid());
+                    MSSQLConnection.deleteDirectory(result.getUuid(), file_Path);
                 }
 
                 // Обновление статуса
+                logger.info("Вызов processSingleMessageAsync.updateMessageStatusDate => ");
                 databaseService.updateMessageStatusDate(topic, server, result.getId(),
                         "send", new Timestamp(System.currentTimeMillis()));
             } catch (SQLException e) {
@@ -120,6 +154,7 @@ public class ConsumerServer {
 
     private void handleMessageProcessingError(MessageData result, SQLException e) {
         try {
+            logger.info("Вызов handleMessageProcessingError.updateMessageStatusDate");
             databaseService.updateMessageStatusDate(topic, server, result.getId(),
                     "error", new Timestamp(System.currentTimeMillis()));
         } catch (SQLException ex) {
@@ -171,7 +206,7 @@ public class ConsumerServer {
 
                 AddCorrectDataJSONFromBrokerToDBSQL(recordList);
 
-                updateStatusDBSQL("select");
+                databaseService.updateMessagesForProcessing(topic, server, "select", typeMes);
 
                 resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
 
@@ -195,17 +230,19 @@ public class ConsumerServer {
                         Future<?> future = executor.submit(() -> {
                             try {
 //                                result.setCaption(result.getId() + " " + result.getCaption()); //TODO удалить строку перед внедрением на ПРОД
-                                StringBuilder sPath = MSSQLConnectionExample.DownloadBinaryDV(result.getUuid());
+                                StringBuilder sPath = MSSQLConnection.DownloadBinaryDV(result.getUuid(), URL_MSSQL, USER_MSSQL, PASSWORD_MSSQL, file_Path);
 
                                 emailService.sendMail(result.getTo(), result.getToCC(), result.getBCC(), result.getCaption(),
                                         result.getBody(), String.valueOf(sPath));
                                 if (Files.exists(Path.of(file_Path + result.getUuid()))) {
-                                    MSSQLConnectionExample.deleteDirectory(result.getUuid());
+                                    MSSQLConnection.deleteDirectory(result.getUuid(), file_Path);
                                 }
+                                logger.info("Вызов start.executor.updateMessageStatusDate");
                                 databaseService.updateMessageStatusDate(topic, server, result.getId(),
                                         "send", new Timestamp(System.currentTimeMillis()));
                             } catch (SQLException e) {
                                 try {
+                                    logger.info("Вызов start.executor.catch.updateMessageStatusDate");
                                     databaseService.updateMessageStatusDate(topic, server, result.getId(),
                                             "error", new Timestamp(System.currentTimeMillis()));
                                 } catch (SQLException ex) {
@@ -236,7 +273,7 @@ public class ConsumerServer {
             } catch (Exception e) {
                 logger.error("Ошибка в основном цикле обработки", e);
                 try {
-                    Thread.sleep(5000);
+                    Thread.sleep(Long.parseLong(htread_sleep));
                 } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
                     logger.error("Поток был прерван", ie);
@@ -246,9 +283,9 @@ public class ConsumerServer {
         }
     }
 
-    private void updateStatusDBSQL(String status) {
-        databaseService.updateMessagesForProcessing(topic, server, status, typeMes);
-    }
+//    private void updateStatusDBSQL(String status) {
+//        databaseService.updateMessagesForProcessing(topic, server, status, typeMes);
+//    }
     // Проверка корректности JSON перед вставкой в БД
     private void AddCorrectDataJSONFromBrokerToDBSQL(List<ConsumerRecord<String, String>> recordList) {
 
@@ -294,8 +331,8 @@ public class ConsumerServer {
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
         DatabaseService databaseService = new DatabaseService(configLoader);
         EmailService emailService = new EmailService(configLoader);
-        MSSQLConnectionExample mssqlConnectionExample = new MSSQLConnectionExample(configLoader);
-        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, mssqlConnectionExample, configLoader);
+//        MSSQLConnection mssqlConnection = new MSSQLConnection(configLoader);
+        ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, configLoader);
 
         //Создать таблицу если не существует
 //        try {
@@ -333,7 +370,7 @@ public class ConsumerServer {
         if (useWhileLoop) {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(Long.parseLong(htread_sleep));
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     logger.info("Поток прерван, завершение работы");

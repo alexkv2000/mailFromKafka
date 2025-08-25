@@ -8,16 +8,19 @@ FILE_PATH=c:\\Users\\KvochkinAY\\Desktop\\tmp\\attach\\
 NUM_THREADS=15
 NUM_ATTEMPT=5
 LIMIT_SELECT=100
+THREAD_SLEEP=5000
+
+
 SERVER=doc-test_dev
 TYPE_MES=1912
 
 DRIVER_MYSQL=com.mysql.cj.jdbc.Driver
 DB_PATH=jdbc:mysql://doc-test:3306/sql-kafka
 USER_SQL=root
-PASSWORD_SQL=MySQLP@%%W)RD
+PASSWORD_SQL=G@{MsEmeXl~Gsu8~{Kcv
 
 DRIVER_MSSQL=com.microsoft.sqlserver.jdbc.SQLServerDriver
-URL_MSSQL=jdbc:sqlserver://docprod\sqlprod;databaseName=GAZ;encrypt=false;trustServerCertificate=true;
+URL_MSSQL=jdbc:sqlserver://docprod\\sqlprod;databaseName=GAZ;encrypt=false;trustServerCertificate=true;
 USER_MSSQL=DVSQL
 PASSWORD_MSSQL=DV_Cthdbc14@
 
