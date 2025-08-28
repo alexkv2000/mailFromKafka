@@ -21,7 +21,6 @@ import org.slf4j.LoggerFactory;
 import kvo.separat.kafkaConsumer.ConfigLoader;
 
 import static com.google.gson.JsonParser.parseString;
-import static kvo.separat.ConsumerServerDV.configLoader;
 
 public class SoapDownloadBinaryDV {
     private static final Logger logger = LoggerFactory.getLogger(SoapDownloadBinaryDV.class);

@@ -4,10 +4,12 @@ import kvo.separat.kafkaConsumer.ConfigLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.xml.crypto.Data;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.*;
+import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.UUID;
@@ -34,10 +36,9 @@ public class MSSQLConnection {
         MSSQLConnection.URL = URL;
     }
 
-    public static void deleteSQL(Connection connection, String uuid) {
+    public static void deleteBinUUID(Connection connection, String uuid) {
         try {
-//            String deleteSQL = "DELETE FROM [dbo].[temp_message] WHERE [uuid] like ('%?%')"; //TODO *****
-            String deleteSQL = "DELETE FROM [dbo].[temp_message] WHERE [uuid] = '?'";
+            String deleteSQL = "DELETE FROM [dbo].[temp_message] WHERE [uuid] = ?";
             PreparedStatement preparedStatement = connection.prepareStatement(deleteSQL);
 
             int totalRowsAffected = 0;
@@ -50,22 +51,29 @@ public class MSSQLConnection {
             totalRowsAffected = Arrays.stream(batchResults).sum();
 
             System.out.println("Удалено строк: " + totalRowsAffected);
-//
-//            preparedStatement.setInt(1, idToDelete);
-//
-//            int rowsAffected = preparedStatement.executeUpdate();
-//            System.out.println("Удалено строк: " + rowsAffected);
         } catch (SQLException e) {
             System.err.println("Ошибка SQL: " + e.getMessage());
         }
     }
 
+    public static void deleteBinMoreSevenDays(Connection connection, LocalDate data) {
+        try {
+            String deleteSQL = "DELETE FROM [dbo].[temp_message] WHERE [data_create]+7 <= ?;";
+            PreparedStatement preparedStatement = connection.prepareStatement(deleteSQL);
+            int totalRowsAffected = 0;
+            preparedStatement.setString(1, data.toString());
+            int[] batchResults = preparedStatement.executeBatch();  // Выполняем пакет
+            totalRowsAffected = Arrays.stream(batchResults).sum();
+            logger.info("Удалено из истории {} Binary файлов (MSSQL база)", totalRowsAffected);
+        } catch (SQLException e) {
+            logger.error("Ошибка удаления из истории Binary файлов (MSSQL база): " + e.getMessage());
+        }
+    }
+
     public static void updateStatusSQL(Connection connection, String uuid, String new_status) {
         try {
-            // 4. Пример обновления поля status по ID
-
-//            String updateSQL = "UPDATE [dbo].[temp_message] SET [status] = ? WHERE [uuid] like ?"; //TODO *****
-            String updateSQL = "UPDATE [dbo].[temp_message] SET [status] = ? WHERE [uuid] = `?`";
+            // обновления поля status по ID
+            String updateSQL = "UPDATE [dbo].[temp_message] SET [status] = ? WHERE [uuid] = ?";
             PreparedStatement preparedStatement = connection.prepareStatement(updateSQL);
             preparedStatement.setString(1, new_status);
             preparedStatement.setString(2, uuid);
@@ -114,8 +122,7 @@ public class MSSQLConnection {
             System.out.println("Данные из таблицы MSSQL temp_message (закачка Binary):");
             statement = connection.createStatement();
 
-
-//            String selSQL = "SELECT ID, uuid, namefiles, status, type, bin FROM [dbo].[temp_message] WHERE status='new' AND uuid like ('%" + uuid + "%')"; //TODO *****
+            //            String selSQL = "SELECT ID, uuid, namefiles, status, type, bin FROM [dbo].[temp_message] WHERE status='new' AND uuid like ('%" + uuid + "%')"; //TODO *****
             String selSQL = "SELECT ID, uuid, namefiles, status, type, bin FROM [dbo].[temp_message] WHERE status='new' AND uuid ='" + uuid + "';";
             ResultSet resultSet = selectSQL(statement, selSQL);
             if (resultSet == null) {

@@ -14,10 +14,8 @@ import java.io.IOException;
 import java.util.Properties;
 import java.util.UUID;
 
-import static kvo.separat.ConsumerServerDV.configLoader;
-
 public class EmailService {
-    private static final int NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
+    private final int NUM_ATTEMPT;
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
     private final String email;
     private final String password;
@@ -27,6 +25,7 @@ public class EmailService {
         this.email = configLoader.getProperty("EMAIL");
         this.password = configLoader.getProperty("PASSWORD");
         this.smtpServer = configLoader.getProperty("SMTP_SERVER");
+        this.NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
     }
 
 //    public void sendMessage(MessageData messageData, FileService fileService) throws IOException {

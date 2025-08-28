@@ -8,23 +8,22 @@ import org.slf4j.LoggerFactory;
 import java.sql.*;
 import java.util.*;
 
-import static kvo.separat.ConsumerServerDV.configLoader;
-
 public class DatabaseService {
 
     private static final Logger logger = LoggerFactory.getLogger(DatabaseService.class);
-    private static final int NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
-    private final String dbUrl;
-    private final String user;
-    private final String password;
+    private final int NUM_ATTEMPT;
+    private static String dbUrl = null;
+    private static String user = null;
+    private static String password = null;
 
     public DatabaseService(ConfigLoader configLoader) {
-        this.dbUrl = configLoader.getProperty("DB_PATH");
-        this.user = configLoader.getProperty("USER_SQL");
-        this.password = configLoader.getProperty("PASSWORD_SQL");
+        dbUrl = configLoader.getProperty("DB_PATH");
+        user = configLoader.getProperty("USER_SQL");
+        password = configLoader.getProperty("PASSWORD_SQL");
+        NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
     }
 
-    public Connection getConnection() throws SQLException {
+    public static Connection getConnection() throws SQLException {
         return DriverManager.getConnection(dbUrl, user, password);
     }
 
@@ -75,7 +74,19 @@ public class DatabaseService {
         }
     }
 
+    static void deleteOldMessages(Integer days) {
+        String deleteSQL = "DELETE FROM messages WHERE date_create < DATE_SUB(NOW(), INTERVAL " + days.toString() + " DAY)";
 
+        try (Connection connection = getConnection();
+             PreparedStatement deleteStatement = connection.prepareStatement(deleteSQL)) {
+
+            int deletedCount = deleteStatement.executeUpdate();
+            logger.info("Удалено {} записей из MySQL (старше 7 дней)", deletedCount);
+
+        } catch (SQLException e) {
+            logger.error("Ошибка удаление старых сообщений из MySQL базы : ", e);
+        }
+    }
 
     public void repeatSend(Integer messageId) {
         updateParametersMessage(messageId, 0);

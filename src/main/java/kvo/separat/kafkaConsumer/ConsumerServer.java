@@ -1,7 +1,6 @@
 package kvo.separat.kafkaConsumer;
 
 import kvo.separat.mssql.MSSQLConnection;
-import kvo.separat.kafkaConsumer.ConfigLoader;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -11,15 +10,19 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
+import static java.lang.Thread.sleep;
 
 public class ConsumerServer {
 
@@ -27,46 +30,46 @@ public class ConsumerServer {
     private final KafkaConsumerWrapper kafkaConsumer;
     private final DatabaseService databaseService;
     private final EmailService emailService;
-    //    private  final SoapDownloadBinaryDV downloadFilesFromJSON;
     private final String topic;
     private final String server;
     private final int limitSelect;
-    private static ExecutorService executor;
+    private final ExecutorService executor;
     private final String typeMes;
-    private final String file_Path;
-    private static String htread_sleep;
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-    private final String URL_MSSQL;
-    private static String USER_MSSQL;
-    private static String PASSWORD_MSSQL;
+    private final String filePath;
+    private final long threadSleep;
+    private final ScheduledExecutorService scheduler;
+    private final String urlMssql;
+    private final String userMssql;
+    private final String passwordMssql;
 
-    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService, EmailService emailService, ConfigLoader configLoader) {
+    public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService,
+                          EmailService emailService, ConfigLoader configLoader) {
         this.kafkaConsumer = kafkaConsumer;
         this.databaseService = databaseService;
         this.emailService = emailService;
-//        this.downloadFilesFromJSON = downloadFilesFromJSON;
         this.topic = configLoader.getProperty("TOPIC");
         this.server = configLoader.getProperty("SERVER");
         this.limitSelect = Integer.parseInt(configLoader.getProperty("LIMIT_SELECT"));
         this.typeMes = configLoader.getProperty("TYPE_MES");
-        this.file_Path = configLoader.getProperty("FILE_PATH");
+        this.filePath = configLoader.getProperty("FILE_PATH");
         this.executor = Executors.newFixedThreadPool(Integer.parseInt(configLoader.getProperty("NUM_THREADS")));
-        htread_sleep = configLoader.getProperty("THREAD_SLEEP");
-        this.URL_MSSQL = configLoader.getProperty("URL_MSSQL");
-        this.USER_MSSQL = configLoader.getProperty("USER_MSSQL");
-        this.PASSWORD_MSSQL = configLoader.getProperty("PASSWORD_MSSQL");
+        this.threadSleep = Long.parseLong(configLoader.getProperty("THREAD_SLEEP"));
+        this.scheduler = Executors.newScheduledThreadPool(3);
+        this.urlMssql = configLoader.getProperty("URL_MSSQL");
+        this.userMssql = configLoader.getProperty("USER_MSSQL");
+        this.passwordMssql = configLoader.getProperty("PASSWORD_MSSQL");
     }
 
     public void startProcessing() {
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2); //запускаем 2 потока
-
         scheduler.scheduleWithFixedDelay(() -> {
             try {
-                this.processMessages();
+                Connection connection = DriverManager.getConnection(urlMssql, userMssql, passwordMssql);
+                MSSQLConnection.deleteBinMoreSevenDays(connection, java.time.LocalDate.now());  // Удаление Binary из MSSQL больше 7 дней
+                DatabaseService.deleteOldMessages(7); // Уделание Messages из MySQL больше 7 дней
             } catch (Exception e) {
-                logger.error("Error in processMessages", e);
+                logger.error("Error in MSSQLConnection.deleteBinMoreSevenDay ", e);
             }
-        }, 0, 5, TimeUnit.SECONDS);
+        }, 0, 1, TimeUnit.DAYS);
 
         scheduler.scheduleWithFixedDelay(() -> {
             try {
@@ -75,47 +78,52 @@ public class ConsumerServer {
                 logger.error("Error in setKafkaConsumer", e);
             }
         }, 0, 5, TimeUnit.SECONDS);
+
+        scheduler.scheduleWithFixedDelay(() -> {
+            try {
+                this.processMessages();
+            } catch (Exception e) {
+                logger.error("Error in processMessages", e);
+            }
+        }, 0, 5, TimeUnit.SECONDS);
     }
-    private void setKafkaConsumer(){
-        logger.info("Start setKafkaConsumer : getConsumerRecords() =>");
+
+    private void setKafkaConsumer() {
+        logger.debug("Start setKafkaConsumer: getConsumerRecords()");
         List<ConsumerRecord<String, String>> recordList = getConsumerRecords();
-        logger.info("Start setKafkaConsumer (проверка структуры JSON) : AddCorrectDataJSONFromBrokerToDBSQL() => ");
-        AddCorrectDataJSONFromBrokerToDBSQL(recordList); //проверка структуры JSON
+        logger.debug("Start setKafkaConsumer: AddCorrectDataJSONFromBrokerToDBSQL()");
+        addCorrectDataJSONFromBrokerToDBSQL(recordList);
     }
+
     private void processMessages() {
         try {
-//            logger.info("Start processMessages : getConsumerRecords() =>");
-//            List<ConsumerRecord<String, String>> recordList = getConsumerRecords();
-//            logger.info("Start processMessages (проверка структуры JSON) : AddCorrectDataJSONFromBrokerToDBSQL() => ");
-//            AddCorrectDataJSONFromBrokerToDBSQL(recordList); //проверка структуры JSON
-            logger.info("Start processMessages (забронировали данные для отбработки) : updateMessagesForProcessing() => ");
-            databaseService.updateMessagesForProcessing(topic, server,"select", typeMes, limitSelect); //забронировали данные для отбработки
-            logger.info("Start processMessages (берем забронированные данные в работу и данные с ошибкой кол-во попыток < NUM_ATTEMPT) : selectMessages() => ");
-            List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect); //берем забронированные данные в работу и данные с ошибкой кол-во попыток < NUM_ATTEMPT
+            logger.debug("Updating messages for processing");
+            databaseService.updateMessagesForProcessing(topic, server, "select", typeMes, limitSelect);
+
+            logger.debug("Selecting messages for processing");
+            List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
 
             if (resultSet == null || resultSet.isEmpty()) {
-                logger.debug("Нет сообщений для обработки");
+                logger.debug("No messages to process");
                 return;
             }
 
-            List<Future<?>> futures = new ArrayList<>();
-            logger.info("Start processMessages (проверка записей resultSet) : for (MessageData result : resultSet) => ");
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+
             for (MessageData result : resultSet) {
-                logger.info("Start processMessages (проверка записей resultSet) : isValidMessage() => ");
                 if (!isValidMessage(result)) {
-                    logger.error("Некорректные данные сообщения, пропускаем ID: {}",
-                            result != null ? result.getId() : "null");
-                    logger.info("Вызов processMessages.updateMessageStatusDate => ");
-                    databaseService.updateMessageStatusDate(topic, server, result.getId(), "error DATA JSON", new Timestamp(System.currentTimeMillis()));
+                    logger.error("Invalid message data, skipping ID: {}", result != null ? result.getId() : "null");
+                    updateMessageStatusWithError(result, "error DATA JSON");
                     continue;
                 }
-                logger.info("Start processMessages (подготовка / отправка сообщения) : processSingleMessageAsync() => ");
+
                 futures.add(processSingleMessageAsync(result));
             }
-            logger.info("Start processMessages (ожидение отправки всех сообщений) : waitForFuturesCompletion() => ");
-            waitForFuturesCompletion(futures);
+
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
         } catch (Exception e) {
-            logger.error("Критическая ошибка в процессе обработки", e); //не нужен sleep, scheduleWithFixedDelay сам управляет интервалами
+            logger.error("Critical error in message processing", e);
         }
     }
 
@@ -124,259 +132,155 @@ public class ConsumerServer {
                 (message.getTo() != null || message.getToCC() != null);
     }
 
-    private Future<?> processSingleMessageAsync(MessageData result) {
-        return executor.submit(() -> {
+    private CompletableFuture<Void> processSingleMessageAsync(MessageData message) {
+        return CompletableFuture.runAsync(() -> {
             try {
-                // TODO Временная модификация (удалить в продакшене)
-//                result.setCaption(result.getId() + " " + result.getCaption());
+                StringBuilder filePathBuilder = MSSQLConnection.DownloadBinaryDV(
+                        message.getUuid(), urlMssql, userMssql, passwordMssql, filePath);
 
-                // Основная логика обработки
+                emailService.sendMail(message.getTo(), message.getToCC(), message.getBCC(),
+                        message.getCaption(), message.getBody(), filePathBuilder.toString());
 
-                StringBuilder sPath = MSSQLConnection.DownloadBinaryDV(result.getUuid(), URL_MSSQL, USER_MSSQL , PASSWORD_MSSQL, file_Path);
-                emailService.sendMail(result.getTo(), result.getToCC(), result.getBCC(), result.getCaption(), result.getBody(), String.valueOf(sPath));
+                cleanupTempFiles(String.valueOf(message.getUuid()));
+                updateMessageStatus(String.valueOf(message.getId()), "send");
 
-                // Очистка временных файлов
-                if (Files.exists(Path.of(file_Path + result.getUuid()))) {
-                    MSSQLConnection.deleteDirectory(result.getUuid(), file_Path);
-                }
-
-                // Обновление статуса
-                logger.info("Вызов processSingleMessageAsync.updateMessageStatusDate => ");
-                databaseService.updateMessageStatusDate(topic, server, result.getId(),
-                        "send", new Timestamp(System.currentTimeMillis()));
-            } catch (SQLException e) {
-                handleMessageProcessingError(result, e);
             } catch (IOException e) {
-                throw new RuntimeException("IO ошибка при обработке сообщения", e);
+                logger.error("IO error processing message ID: {}", message.getId(), e);
+                updateMessageStatusWithError(message, "IO error");
             }
-        });
+        }, executor);
     }
 
-    private void handleMessageProcessingError(MessageData result, SQLException e) {
+    private void cleanupTempFiles(String uuid) throws IOException {
+        Path tempDir = Path.of(filePath + uuid);
+        if (Files.exists(tempDir)) {
+            MSSQLConnection.deleteDirectory(UUID.fromString(uuid), filePath);
+        }
+    }
+
+    private void updateMessageStatus(String messageId, String status) {
         try {
-            logger.info("Вызов handleMessageProcessingError.updateMessageStatusDate");
-            databaseService.updateMessageStatusDate(topic, server, result.getId(),
-                    "error", new Timestamp(System.currentTimeMillis()));
-        } catch (SQLException ex) {
-            logger.error("Ошибка при обновлении статуса 'ERROR' сообщения ID: {}", result.getId(), ex);
-        }
-        logger.error("Ошибка при обработке сообщения ID: {}", result.getId(), e);
-    }
-
-    private void waitForFuturesCompletion(List<Future<?>> futures) {
-        for (Future<?> future : futures) {
-            try {
-                future.get();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                logger.warn("Обработка прервана во время ожидания задач");
-                break;
-            } catch (ExecutionException e) {
-                logger.error("Ошибка выполнения задачи", e.getCause());
-            }
+            databaseService.updateMessageStatusDate(topic, server, Integer.valueOf(messageId),
+                    status, new Timestamp(System.currentTimeMillis()));
+        } catch (SQLException e) {
+            logger.error("Error updating status to '{}' for message ID: {}", status, messageId, e);
         }
     }
 
-    public void stopProcessing() {
-        scheduler.shutdown();
-        try {
-            if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) {
-                scheduler.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            scheduler.shutdownNow();
-            Thread.currentThread().interrupt();
+    private void updateMessageStatusWithError(MessageData message, String errorType) {
+        if (message != null) {
+            updateMessageStatus(String.valueOf(message.getId()), errorType);
         }
     }
 
+    private void handleProcessingError(MessageData message, SQLException e) {
+        logger.error("Error processing message ID: {}", message.getId(), e);
+        updateMessageStatus(String.valueOf(message.getId()), "error");
+    }
 
     public void start() {
-
-//        try {
-//            databaseService.createTableIfNotExist();
-//        } catch (SQLException e) {
-//            throw new RuntimeException(e);
-//        }
-        List<ConsumerRecord<String, String>> recordList;
-        List<MessageData> resultSet;
-
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
             try {
-                recordList = getConsumerRecords();
-
-                AddCorrectDataJSONFromBrokerToDBSQL(recordList);
-
-                databaseService.updateMessagesForProcessing(topic, server, "select", typeMes);
-
-                resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
-
-                if (resultSet == null || resultSet.isEmpty()) {
-                    logger.debug("Нет сообщений для обработки");
-                    continue;
-                }
-
-                List<Future<?>> futures = new ArrayList<>();
-
-                for (MessageData result : resultSet) {
-                    try {
-                        // Проверка данных сообщения перед обработкой
-                        if (result == null || result.getUuid() == null || (result.getTo() == null && result.getToCC() == null)) {
-                        // if (result == null || result.getUuid() == null || result.getTo() == null) {
-                            logger.error("Некорректные данные сообщения, пропускаем ID: " +
-                                    (result != null ? result.getId() : "null"));
-                            continue;
-                        }
-
-                        Future<?> future = executor.submit(() -> {
-                            try {
-//                                result.setCaption(result.getId() + " " + result.getCaption()); //TODO удалить строку перед внедрением на ПРОД
-                                StringBuilder sPath = MSSQLConnection.DownloadBinaryDV(result.getUuid(), URL_MSSQL, USER_MSSQL, PASSWORD_MSSQL, file_Path);
-
-                                emailService.sendMail(result.getTo(), result.getToCC(), result.getBCC(), result.getCaption(),
-                                        result.getBody(), String.valueOf(sPath));
-                                if (Files.exists(Path.of(file_Path + result.getUuid()))) {
-                                    MSSQLConnection.deleteDirectory(result.getUuid(), file_Path);
-                                }
-                                logger.info("Вызов start.executor.updateMessageStatusDate");
-                                databaseService.updateMessageStatusDate(topic, server, result.getId(),
-                                        "send", new Timestamp(System.currentTimeMillis()));
-                            } catch (SQLException e) {
-                                try {
-                                    logger.info("Вызов start.executor.catch.updateMessageStatusDate");
-                                    databaseService.updateMessageStatusDate(topic, server, result.getId(),
-                                            "error", new Timestamp(System.currentTimeMillis()));
-                                } catch (SQLException ex) {
-                                    logger.error("Ошибка при обновлении статуса 'ERROR' сообщения ID: " + result.getId(), ex);
-                                }
-                                logger.error("Ошибка при обработке сообщения ID: " + result.getId(), e);
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
-//                            catch (IOException e) {
-//                                logger.error("IO ошибка при обработке сообщения ID: " + result.getId(), e);
-//                            }
-                        });
-                        futures.add(future);
-                    } catch (Exception e) {
-                        logger.error("Ошибка при создании задачи для сообщения, пропускаем запись", e);
-                    }
-                }
-
-                for (Future<?> future : futures) {
-                    try {
-                        future.get();
-                    } catch (Exception e) {
-                        logger.error("Ошибка при выполнении задачи", e);
-                    }
-                }
-
+                processSingleIteration();
+                sleep(threadSleep);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.info("Thread interrupted, shutting down");
+                break;
             } catch (Exception e) {
-                logger.error("Ошибка в основном цикле обработки", e);
-                try {
-                    Thread.sleep(Long.parseLong(htread_sleep));
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    logger.error("Поток был прерван", ie);
-                    break;
-                }
+                logger.error("Error in main processing loop", e);
             }
         }
     }
 
-//    private void updateStatusDBSQL(String status) {
-//        databaseService.updateMessagesForProcessing(topic, server, status, typeMes);
-//    }
-    // Проверка корректности JSON перед вставкой в БД
-    private void AddCorrectDataJSONFromBrokerToDBSQL(List<ConsumerRecord<String, String>> recordList) {
+    private void processSingleIteration() {
+        List<ConsumerRecord<String, String>> recordList = getConsumerRecords();
+        addCorrectDataJSONFromBrokerToDBSQL(recordList);
 
+        databaseService.updateMessagesForProcessing(topic, server, "select", typeMes, limitSelect);
+        List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
+
+        if (resultSet == null || resultSet.isEmpty()) {
+            logger.debug("No messages to process");
+            return;
+        }
+
+        List<CompletableFuture<Void>> futures = resultSet.stream()
+                .filter(this::isValidMessage)
+                .map(this::processSingleMessageAsync)
+                .toList();
+        //.collect(Collectors.toList()); //заменил на  .toList();
+
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+    }
+
+    private void addCorrectDataJSONFromBrokerToDBSQL(List<ConsumerRecord<String, String>> recordList) {
         for (ConsumerRecord<String, String> record : recordList) {
             try {
-                // Проверяем валидность JSON
                 new JSONObject(record.value());
-                databaseService.insertMessages(Collections.singletonList(record), typeMes); //параметр 'server'="" (не передается)
+                databaseService.insertMessages(Collections.singletonList(record), typeMes);
             } catch (JSONException e) {
-                logger.error("Некорректный JSON в сообщении, пропускаем: " + record.value());
+                logger.error("Invalid JSON in message, skipping: {}", record.value());
             }
         }
     }
 
     private List<ConsumerRecord<String, String>> getConsumerRecords() {
-        List<ConsumerRecord<String, String>> recordList;
-        Iterable<ConsumerRecord<String, String>> records;
-        records = kafkaConsumer.pollRecords();
-        recordList = StreamSupport.stream(records.spliterator(), false)
+        Iterable<ConsumerRecord<String, String>> records = kafkaConsumer.pollRecords();
+        return StreamSupport.stream(records.spliterator(), false)
                 .collect(Collectors.toList());
-        return recordList;
+    }
+
+    public void stopProcessing() {
+        scheduler.shutdown();
+        executor.shutdown();
+
+        try {
+            if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            scheduler.shutdownNow();
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     public static void main(String[] args) throws IOException {
         String currentDir = System.getProperty("user.dir");
-        String configPath = currentDir + "\\config\\setting.txt";
-
-        //Проверка параметров запуска
+        String configPath = currentDir + "/config/setting.txt";
         boolean useWhileLoop = false;
+
         for (String arg : args) {
             if (arg.startsWith("config.path=")) {
                 configPath = arg.substring("config.path=".length());
-                continue;
-            }
-            if (arg.startsWith("while=")) {
-                 useWhileLoop = arg.substring("while=".length()).equals("true");
+            } else if (arg.startsWith("while=")) {
+                useWhileLoop = Boolean.parseBoolean(arg.substring("while=".length()));
             }
         }
-        logger.info("Запуск в режиме: {}", useWhileLoop ? "While-Loop" : "Scheduled");
-        //
+
+        logger.info("Starting in mode: {}", useWhileLoop ? "While-Loop" : "Scheduled");
 
         ConfigLoader configLoader = new ConfigLoader(configPath);
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
         DatabaseService databaseService = new DatabaseService(configLoader);
         EmailService emailService = new EmailService(configLoader);
-//        MSSQLConnection mssqlConnection = new MSSQLConnection(configLoader);
+
         ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, configLoader);
 
-        //Создать таблицу если не существует
-//        try {
-//            databaseService.createTableIfNotExist();
-//        } catch (SQLException e) {
-//            throw new RuntimeException(e);
-//        }
-        //
-        // Регистрация обработчика Ctrl+C
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Получен сигнал завершения (Ctrl+C)");
+            logger.info("Received shutdown signal");
             consumerServer.stopProcessing();
-            if (executor != null) {
-                executor.shutdown();
-                try {
-                    if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-                        executor.shutdownNow();
-                    }
-                } catch (InterruptedException e) {
-                    executor.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
-            }
-            logger.info("Приложение корректно завершено");
+            logger.info("Application terminated correctly");
         }));
-        //
-        // Запуск соответствующего режима
+
         if (useWhileLoop) {
-            consumerServer.start(); // Бесконечный цикл while
+            consumerServer.start();
         } else {
-            consumerServer.startProcessing(); // Стандартный режим
+            consumerServer.startProcessing();
         }
-        //
-        // Ожидание завершения (для while-loop режима)
-        if (useWhileLoop) {
-            while (!Thread.currentThread().isInterrupted()) {
-                try {
-                    Thread.sleep(Long.parseLong(htread_sleep));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.info("Поток прерван, завершение работы");
-                }
-            }
-        }
-        //
     }
 }
