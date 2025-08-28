@@ -67,7 +67,7 @@ public class ConsumerServer {
                 MSSQLConnection.deleteBinMoreSevenDays(connection, java.time.LocalDate.now());  // Удаление Binary из MSSQL больше 7 дней
                 DatabaseService.deleteOldMessages(7); // Уделание Messages из MySQL больше 7 дней
             } catch (Exception e) {
-                logger.error("Error in MSSQLConnection.deleteBinMoreSevenDay ", e);
+                logger.error("Error in ConsumerServer.startProcessing.MSSQLConnection.deleteBinMoreSevenDay ", e);
             }
         }, 0, 1, TimeUnit.DAYS);
 
@@ -75,7 +75,7 @@ public class ConsumerServer {
             try {
                 this.setKafkaConsumer();
             } catch (Exception e) {
-                logger.error("Error in setKafkaConsumer", e);
+                logger.error("Error in ConsumerServer.startProcessing.setKafkaConsumer", e);
             }
         }, 0, 5, TimeUnit.SECONDS);
 
@@ -83,7 +83,7 @@ public class ConsumerServer {
             try {
                 this.processMessages();
             } catch (Exception e) {
-                logger.error("Error in processMessages", e);
+                logger.error("Error in ConsumerServer.startProcessing.processMessages", e);
             }
         }, 0, 5, TimeUnit.SECONDS);
     }
@@ -97,14 +97,14 @@ public class ConsumerServer {
 
     private void processMessages() {
         try {
-            logger.debug("Updating messages for processing");
+            logger.debug("Поиск данных сообщений из БД");
             databaseService.updateMessagesForProcessing(topic, server, "select", typeMes, limitSelect);
 
-            logger.debug("Selecting messages for processing");
+            logger.debug("Выборка данных сообщений из БД");
             List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
 
             if (resultSet == null || resultSet.isEmpty()) {
-                logger.debug("No messages to process");
+                logger.debug("Не сообщений в обработке");
                 return;
             }
 
@@ -112,7 +112,7 @@ public class ConsumerServer {
 
             for (MessageData result : resultSet) {
                 if (!isValidMessage(result)) {
-                    logger.error("Invalid message data, skipping ID: {}", result != null ? result.getId() : "null");
+                    logger.error("Некорректные данные в сообщении с ID: {}", result != null ? result.getId() : "null");
                     updateMessageStatusWithError(result, "error DATA JSON");
                     continue;
                 }
@@ -123,7 +123,7 @@ public class ConsumerServer {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
 
         } catch (Exception e) {
-            logger.error("Critical error in message processing", e);
+            logger.error("Критическая ошибка в обработке сообщений ", e);
         }
     }
 
@@ -145,7 +145,7 @@ public class ConsumerServer {
                 updateMessageStatus(String.valueOf(message.getId()), "send");
 
             } catch (IOException e) {
-                logger.error("IO error processing message ID: {}", message.getId(), e);
+                logger.error("IO error процесса сообщения с ID: {}", message.getId(), e);
                 updateMessageStatusWithError(message, "IO error");
             }
         }, executor);
@@ -163,7 +163,7 @@ public class ConsumerServer {
             databaseService.updateMessageStatusDate(topic, server, Integer.valueOf(messageId),
                     status, new Timestamp(System.currentTimeMillis()));
         } catch (SQLException e) {
-            logger.error("Error updating status to '{}' for message ID: {}", status, messageId, e);
+            logger.error("Ошибка обновления Статуса '{}' для сообщения с ID: {}", status, messageId, e);
         }
     }
 
@@ -174,7 +174,7 @@ public class ConsumerServer {
     }
 
     private void handleProcessingError(MessageData message, SQLException e) {
-        logger.error("Error processing message ID: {}", message.getId(), e);
+        logger.error("Ошибка процесса обработки сообщения ID: {}", message.getId(), e);
         updateMessageStatus(String.valueOf(message.getId()), "error");
     }
 
@@ -185,10 +185,10 @@ public class ConsumerServer {
                 sleep(threadSleep);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.info("Thread interrupted, shutting down");
+                logger.info("Поток прерван, останавливается");
                 break;
             } catch (Exception e) {
-                logger.error("Error in main processing loop", e);
+                logger.error("Ошибка в main процессе цикла loop", e);
             }
         }
     }
@@ -201,7 +201,7 @@ public class ConsumerServer {
         List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
 
         if (resultSet == null || resultSet.isEmpty()) {
-            logger.debug("No messages to process");
+            logger.debug("Нет сообщений для обработки ");
             return;
         }
 
@@ -220,7 +220,7 @@ public class ConsumerServer {
                 new JSONObject(record.value());
                 databaseService.insertMessages(Collections.singletonList(record), typeMes);
             } catch (JSONException e) {
-                logger.error("Invalid JSON in message, skipping: {}", record.value());
+                logger.error("Ошибочный JSON в сообщении, показала : {}", record.value());
             }
         }
     }
@@ -262,7 +262,7 @@ public class ConsumerServer {
             }
         }
 
-        logger.info("Starting in mode: {}", useWhileLoop ? "While-Loop" : "Scheduled");
+        logger.info("Старовала схема : {}", useWhileLoop ? "While-Loop" : "Scheduled");
 
         ConfigLoader configLoader = new ConfigLoader(configPath);
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
@@ -272,9 +272,9 @@ public class ConsumerServer {
         ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, configLoader);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Received shutdown signal");
+            logger.info("Послан сигнал остановки приложения");
             consumerServer.stopProcessing();
-            logger.info("Application terminated correctly");
+            logger.info("Приложение остановлено корректно");
         }));
 
         if (useWhileLoop) {
