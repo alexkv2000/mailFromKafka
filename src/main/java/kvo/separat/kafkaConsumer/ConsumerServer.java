@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -133,6 +134,14 @@ public class ConsumerServer {
     }
 
     private CompletableFuture<Void> processSingleMessageAsync(MessageData message) {
+        Path dir = Paths.get(filePath);
+        if (!Files.exists(dir)) {
+            try {
+                Files.createDirectories(dir);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
         return CompletableFuture.runAsync(() -> {
             try {
                 StringBuilder filePathBuilder = MSSQLConnection.DownloadBinaryDV(

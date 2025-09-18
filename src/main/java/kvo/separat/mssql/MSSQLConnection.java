@@ -132,9 +132,19 @@ public class MSSQLConnection {
             Path filePathFull = null;
             while (resultSet.next()) {
                 String name_file = resultSet.getString("namefiles").trim();
+                // Проверка: если имя файла не указано (null, пустое или только пробелы), пропускаем закачку
+                if (name_file == null || name_file.trim().isEmpty()) {
+                    logger.warn("Имя файла отсутствует для UUID: " + uuid + ". Закачка пропущена.");
+                    continue;  // Переходим к следующей записи
+                }
                 byte[] bin = resultSet.getBytes("bin");
                 byte[] fileBytes = Base64.getDecoder().decode(bin);
 //                System.out.println(Arrays.toString(fileBytes));
+                // Дополнительная проверка: если бинарные данные пустые, пропускаем
+                if (fileBytes == null || fileBytes.length == 0) {
+                    logger.warn("Бинарные данные отсутствуют для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
+                    continue;
+                }
                 logger.info("Данные из таблицы MSSQL temp_message (uuid) : " + uuid);
                 String uuid_ = resultSet.getString("uuid");
                 Path targetDir = Path.of(file_Path, uuid_);
