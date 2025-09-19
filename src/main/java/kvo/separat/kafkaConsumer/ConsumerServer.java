@@ -226,10 +226,16 @@ public class ConsumerServer {
     private void addCorrectDataJSONFromBrokerToDBSQL(List<ConsumerRecord<String, String>> recordList) {
         for (ConsumerRecord<String, String> record : recordList) {
             try {
-                new JSONObject(record.value());
-                databaseService.insertMessages(Collections.singletonList(record), typeMes);
+                JSONObject json = new JSONObject(record.value());
+                // Проверяем наличие ключа "typeMes" и вставляем в БД
+                if (json.has("typeMes")) {
+                    String extractedTypeMes = json.getString("typeMes");  // Извлекаем значение как строку
+                    databaseService.insertMessages(Collections.singletonList(record), extractedTypeMes);
+                } else {
+                    logger.warn("Ключ 'typeMes' отсутствует в JSON-сообщении: {}", record.value());
+                }
             } catch (JSONException e) {
-                logger.error("Ошибочный JSON в сообщении, показала : {}", record.value());
+                logger.error("Ошибка обработки JSON в сообщении (возможно, некорректный JSON или typeMes): {}", record.value(), e);
             }
         }
     }

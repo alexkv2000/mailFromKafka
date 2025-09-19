@@ -155,7 +155,7 @@ public class MSSQLConnection {
             }
 //***********************************************************************************
 //      *Обновление статуса
-            updateStatusSQL(connection, String.valueOf(uuid), "update"); //TODO удалено из-за оправки пустых сообщений при сбоях
+            updateStatusSQL(connection, String.valueOf(uuid), "update");
 //      *Удаление записи по ID
 //            Integer[] idToDelete = {7, 10};
 //            deleteSQL(connection, String.valueOf(uuid));

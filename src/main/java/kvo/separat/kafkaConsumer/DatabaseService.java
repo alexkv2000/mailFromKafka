@@ -109,21 +109,39 @@ public class DatabaseService {
 
     public void updateMessagesForProcessing(String topic, String server, String status, String typeMessage, int limitSelect) {
         String[] types = typeMessage.split(",");
-//        String placeholders = String.join(",", Collections.nCopies(types.length, "?"));
-//        String updateSQL = "UPDATE messages SET status = ?, server = ? WHERE id in (SELECT id FROM messages WHERE status IS NULL AND kafka_topic = ? AND server = ? AND typeMes IN(" + placeholders + ") LIMIT ?)";
-        String updateSQL = "UPDATE messages m1 JOIN (SELECT id FROM messages WHERE status IS NULL AND server = ? AND kafka_topic = ? AND typeMes IN (?) LIMIT ?) m2 ON m1.id = m2.id SET m1.status = ?, m1.server = ?;";
+        String placeholders = String.join(",", Collections.nCopies(types.length, "?"));
+
+        String updateSQL = "UPDATE messages m1 JOIN (SELECT id FROM messages WHERE status IS NULL AND server = ? AND kafka_topic = ? AND typeMes IN (" + placeholders + ") LIMIT ?) m2 ON m1.id = m2.id SET m1.status = ?, m1.server = ?;";
+        //String updateSQL = "UPDATE messages m1 JOIN (SELECT id FROM messages WHERE status IS NULL AND server = ? AND kafka_topic = ? AND typeMes IN (?) LIMIT ?) m2 ON m1.id = m2.id SET m1.status = ?, m1.server = ?;";
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
-            updateStatement.setString(1, "");
-            updateStatement.setString(2, topic);
-
-            for (int i = 0; i < types.length; i++) {
-                updateStatement.setString(3 + i, types[i].trim());
+            int paramIndex = 1;
+            // server = ?
+            updateStatement.setString(paramIndex++, "");
+            // kafka_topic = ?
+            updateStatement.setString(paramIndex++, topic);
+            // typeMes IN (?, ?, ...)
+            for (String type : types) {
+                updateStatement.setString(paramIndex++, type.trim());
             }
-            updateStatement.setInt(3 + types.length, limitSelect);
-            updateStatement.setString(4 + types.length, status);
-            updateStatement.setString(5 + types.length, server);
+            // LIMIT ?
+            updateStatement.setInt(paramIndex++, limitSelect);
+            // SET m1.status = ?
+            updateStatement.setString(paramIndex++, status);
+            // SET m1.server = ?
+            updateStatement.setString(paramIndex++, server);
             updateStatement.executeUpdate();
+//            Заменил 19.09.2025 на более читаемый
+//            updateStatement.setString(1, "");
+//            updateStatement.setString(2, topic);
+//
+//            for (int i = 0; i < types.length; i++) {
+//                updateStatement.setString(3 + i, types[i].trim());
+//            }
+//            updateStatement.setInt(3 + types.length, limitSelect);
+//            updateStatement.setString(4 + types.length, status);
+//            updateStatement.setString(5 + types.length, server);
+//            updateStatement.executeUpdate();
 
         } catch (SQLException e) {
             logger.error("Error updating messages status in database", e);

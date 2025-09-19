@@ -4,7 +4,8 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
+import jakarta.mail.Provider;
+import jakarta.mail.Session;
 //import javax.mail.*;
 //import javax.mail.internet.InternetAddress;
 //import javax.mail.internet.MimeBodyPart;
@@ -13,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import jakarta.mail.*;
 import jakarta.mail.internet.*;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Properties;
 import java.util.UUID;
 
