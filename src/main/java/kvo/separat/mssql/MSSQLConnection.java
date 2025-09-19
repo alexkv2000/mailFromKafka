@@ -16,7 +16,7 @@ import java.util.UUID;
 public class MSSQLConnection {
     private static final Logger logger = LoggerFactory.getLogger(MSSQLConnection.class);
 
-    private MSSQLConnection(ConfigLoader configLoader) {
+    private MSSQLConnection() {
     }
 
     public static void deleteBinUUID(Connection connection, String uuid) {

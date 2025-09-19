@@ -42,6 +42,7 @@ public class ConsumerServer {
     private final String urlMssql;
     private final String userMssql;
     private final String passwordMssql;
+    private int deleteAfterDay;
 
     public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService,
                           EmailService emailService, ConfigLoader configLoader) {
@@ -59,6 +60,7 @@ public class ConsumerServer {
         this.urlMssql = configLoader.getProperty("URL_MSSQL");
         this.userMssql = configLoader.getProperty("USER_MSSQL");
         this.passwordMssql = configLoader.getProperty("PASSWORD_MSSQL");
+        deleteAfterDay = Integer.parseInt(configLoader.getProperty("DELETE_AFTER_DAY"));
     }
 
     public void startProcessing() {
@@ -66,7 +68,7 @@ public class ConsumerServer {
             try {
                 Connection connection = DriverManager.getConnection(urlMssql, userMssql, passwordMssql);
                 MSSQLConnection.deleteBinMoreSevenDays(connection, java.time.LocalDate.now());  // Удаление Binary из MSSQL больше 7 дней
-                DatabaseService.deleteOldMessages(7); // Уделание Messages из MySQL больше 7 дней
+                DatabaseService.deleteOldMessages(deleteAfterDay); // Уделание Messages из MySQL больше 7 дней
             } catch (Exception e) {
                 logger.error("Error in ConsumerServer.startProcessing.MSSQLConnection.deleteBinMoreSevenDay ", e);
             }
@@ -229,8 +231,9 @@ public class ConsumerServer {
                 JSONObject json = new JSONObject(record.value());
                 // Проверяем наличие ключа "typeMes" и вставляем в БД
                 if (json.has("typeMes")) {
-                    String extractedTypeMes = json.getString("typeMes");  // Извлекаем значение как строку
-                    databaseService.insertMessages(Collections.singletonList(record), extractedTypeMes);
+                    String extractedTypeMes = json.getString("typeMes");  // Извлекаем значение {typeMes} как строку
+                    String extractedUUID = json.getString("uuid"); // Извлекаем значение {uuid} как строку
+                    databaseService.insertMessages(Collections.singletonList(record), extractedTypeMes, extractedUUID);
                 } else {
                     logger.warn("Ключ 'typeMes' отсутствует в JSON-сообщении: {}", record.value());
                 }

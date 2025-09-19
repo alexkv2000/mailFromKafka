@@ -14,7 +14,6 @@ public class KafkaConsumerWrapper {
 
     private static final Logger logger = LoggerFactory.getLogger(KafkaConsumerWrapper.class);
     private final KafkaConsumer<String, String> consumer;
-    private final String topic;
 
     public KafkaConsumerWrapper(ConfigLoader configLoader) {
         Properties consumerProps = new Properties();
@@ -25,9 +24,8 @@ public class KafkaConsumerWrapper {
         consumerProps.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, configLoader.getProperty("fetch.max.bytes"));
         consumerProps.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, configLoader.getProperty("max.partition.fetch.bytes"));
         consumerProps.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, configLoader.getProperty("fetch.max.wait.ms"));
-
+        String topic = configLoader.getProperty("TOPIC");
         this.consumer = new KafkaConsumer<>(consumerProps);
-        this.topic = configLoader.getProperty("TOPIC");
 
         consumer.subscribe(Collections.singletonList(topic));
         logger.info("Start Kafka source ...");

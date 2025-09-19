@@ -51,12 +51,12 @@ public class DatabaseService {
         }
     }
 
-    public void insertMessages(List<ConsumerRecord<String, String>> records, String typeMessage) {
-        insertMessages(records, "", typeMessage);
+    public void insertMessages(List<ConsumerRecord<String, String>> records, String typeMessage, String extractedUUID) {
+        insertMessages(records, "", typeMessage, extractedUUID);
     }
 
-    public void insertMessages(List<ConsumerRecord<String, String>> records, String server, String typeMessage) {
-        String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create, server, typeMes) VALUES (?, ?, ?, ?, ?)";
+    public void insertMessages(List<ConsumerRecord<String, String>> records, String server, String typeMessage, String uuid) {
+        String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create, server, typeMes, uuid) VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection connection = getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(insertSQL)) {
             for (ConsumerRecord<String, String> record : records) {
@@ -66,6 +66,7 @@ public class DatabaseService {
                 preparedStatement.setTimestamp(paramIndex++, new Timestamp(System.currentTimeMillis()));
                 preparedStatement.setString(paramIndex++, server);
                 preparedStatement.setString(paramIndex++, typeMessage);
+                preparedStatement.setString(paramIndex++, uuid);
                 preparedStatement.executeUpdate();
             }
 
@@ -269,4 +270,5 @@ public class DatabaseService {
 
         return aListMessage;
     }
+
 }
