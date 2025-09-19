@@ -1,22 +1,15 @@
 package kvo.separat.kafkaConsumer;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import jakarta.mail.Provider;
+
 import jakarta.mail.Session;
-//import javax.mail.*;
-//import javax.mail.internet.InternetAddress;
-//import javax.mail.internet.MimeBodyPart;
-//import javax.mail.internet.MimeMessage;
-//import javax.mail.internet.MimeMultipart;
+
 import jakarta.mail.*;
 import jakarta.mail.internet.*;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Properties;
-import java.util.UUID;
+
 
 public class EmailService {
     private final int NUM_ATTEMPT;
@@ -31,27 +24,6 @@ public class EmailService {
         this.smtpServer = configLoader.getProperty("SMTP_SERVER");
         this.NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
     }
-
-//    public void sendMessage(MessageData messageData, FileService fileService) throws IOException {
-//        String to = messageData.getTo();
-//        String toCC = messageData.getToCC();
-//        String caption = messageData.getCaption();
-//        String body = messageData.getBody();
-//        JSONObject urls = messageData.getUrls();
-//        UUID uuid = messageData.getUuid();
-//
-//        String filePaths = null;
-//        if(urls.length()>0) {
-//            filePaths = fileService.downloadFiles(urls, uuid);
-//        }
-//        logger.info("Start send Email ...");
-//        sendMail(to, toCC, caption, body, filePaths);
-//        logger.info("Stop send Email ...");
-//
-//        fileService.deleteDirectory(uuid);
-//        logger.info("Directory deleted access ..." + fileService.getFilePath(uuid));
-//
-//    }
 
     public void sendMail(String to, String toCC, String BCC, String caption, String body, String filePaths) {
         Properties props = new Properties();

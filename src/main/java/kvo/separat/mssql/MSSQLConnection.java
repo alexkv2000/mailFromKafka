@@ -4,7 +4,6 @@ import kvo.separat.kafkaConsumer.ConfigLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.crypto.Data;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,25 +14,9 @@ import java.util.Base64;
 import java.util.UUID;
 
 public class MSSQLConnection {
-    private static String URL;
-    private static String USER;
-    private static String PASSWORD;
-    private static String file_Path;
     private static final Logger logger = LoggerFactory.getLogger(MSSQLConnection.class);
 
     private MSSQLConnection(ConfigLoader configLoader) {
-        URL = configLoader.getProperty("URL_MSSQL");
-        USER = configLoader.getProperty("USER_MSSQL");
-        PASSWORD = configLoader.getProperty("PASSWORD_MSSQL");
-        file_Path = configLoader.getProperty("FILE_PATH");
-    }
-
-    public static String getURL() {
-        return URL;
-    }
-
-    public static void setURL(String URL) {
-        MSSQLConnection.URL = URL;
     }
 
     public static void deleteBinUUID(Connection connection, String uuid) {
@@ -91,17 +74,6 @@ public class MSSQLConnection {
         try {
             resultSet = statement.executeQuery(select);
             return resultSet;
-//// Вывод результатов выборки
-//            ResultSetMetaData metaData = resultSet.getMetaData();
-//            int columnCount = metaData.getColumnCount();
-//            while (resultSet.next()) {
-//                for (int i = 1; i <= columnCount; i++) {
-////                System.out.print(metaData.getColumnName(i).trim() + ": " + resultSet.getString(i).trim() + " | ");
-//                    System.out.print(resultSet.getString(i).trim() + " | ");
-//                }
-//                System.out.println();
-//            }
-
         } catch (SQLException e) {
             System.err.println("Ошибка SQL: " + e.getMessage());
         }
@@ -139,7 +111,6 @@ public class MSSQLConnection {
                 }
                 byte[] bin = resultSet.getBytes("bin");
                 byte[] fileBytes = Base64.getDecoder().decode(bin);
-//                System.out.println(Arrays.toString(fileBytes));
                 // Дополнительная проверка: если бинарные данные пустые, пропускаем
                 if (fileBytes == null || fileBytes.length == 0) {
                     logger.warn("Бинарные данные отсутствуют для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
@@ -199,7 +170,7 @@ public class MSSQLConnection {
                     });
         } catch (IOException e) {
             logger.error("Error walking directory: " + path + " ", e);
-//            throw new RuntimeException(e); //не нужно ожидание, просто изнорируем
+//            throw new RuntimeException(e); //не нужно проброса, просто изнорируем
         }
     }
 }

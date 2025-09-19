@@ -59,13 +59,13 @@ public class DatabaseService {
         String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create, server, typeMes) VALUES (?, ?, ?, ?, ?)";
         try (Connection connection = getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(insertSQL)) {
-
             for (ConsumerRecord<String, String> record : records) {
-                preparedStatement.setString(1, record.topic());
-                preparedStatement.setString(2, record.value());
-                preparedStatement.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
-                preparedStatement.setString(4, server);
-                preparedStatement.setString(5, typeMessage);
+                int paramIndex = 1;
+                preparedStatement.setString(paramIndex++, record.topic());
+                preparedStatement.setString(paramIndex++, record.value());
+                preparedStatement.setTimestamp(paramIndex++, new Timestamp(System.currentTimeMillis()));
+                preparedStatement.setString(paramIndex++, server);
+                preparedStatement.setString(paramIndex++, typeMessage);
                 preparedStatement.executeUpdate();
             }
 
@@ -131,18 +131,6 @@ public class DatabaseService {
             // SET m1.server = ?
             updateStatement.setString(paramIndex++, server);
             updateStatement.executeUpdate();
-//            Заменил 19.09.2025 на более читаемый
-//            updateStatement.setString(1, "");
-//            updateStatement.setString(2, topic);
-//
-//            for (int i = 0; i < types.length; i++) {
-//                updateStatement.setString(3 + i, types[i].trim());
-//            }
-//            updateStatement.setInt(3 + types.length, limitSelect);
-//            updateStatement.setString(4 + types.length, status);
-//            updateStatement.setString(5 + types.length, server);
-//            updateStatement.executeUpdate();
-
         } catch (SQLException e) {
             logger.error("Error updating messages status in database", e);
         }
@@ -154,12 +142,13 @@ public class DatabaseService {
         String updateSQL = "UPDATE messages SET status = ?, date_end = ?, NUM_ATTEMPT = ? WHERE id = ? AND kafka_topic = ? AND server = ?";
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
-            updateStatement.setString(1, status);
-            updateStatement.setTimestamp(2, timestamp);
-            updateStatement.setInt(3, ++numAttempt);
-            updateStatement.setInt(4, messageId);
-            updateStatement.setString(5, topic);
-            updateStatement.setString(6, server);
+            int paramIndex = 1;
+            updateStatement.setString(paramIndex++, status);
+            updateStatement.setTimestamp(paramIndex++, timestamp);
+            updateStatement.setInt(paramIndex++, ++numAttempt);
+            updateStatement.setInt(paramIndex++, messageId);
+            updateStatement.setString(paramIndex++, topic);
+            updateStatement.setString(paramIndex++, server);
             updateStatement.executeUpdate();
             logger.info("Database UPDATE Statue and Date_END");
         } catch (SQLException e) {
@@ -242,19 +231,19 @@ public class DatabaseService {
         ArrayList<Integer> id_error = new ArrayList<>();
         try (Connection connection = getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(selectSQL)) {
-
-            preparedStatement.setString(1, topic);
-            preparedStatement.setString(2, server);
+            int paramIndex = 1;
+            preparedStatement.setString(paramIndex++, topic);
+            preparedStatement.setString(paramIndex++, server);
             for (int i = 0; i < types.length; i++) {
-                preparedStatement.setString(3 + i, types[i].trim());
+                preparedStatement.setString(paramIndex++, types[i].trim());
             }
-            preparedStatement.setInt(3 + types.length, NUM_ATTEMPT);
-            preparedStatement.setString(4 + types.length, topic);
-            preparedStatement.setString(5 + types.length, server);
+            preparedStatement.setInt(paramIndex++, NUM_ATTEMPT);
+            preparedStatement.setString(paramIndex++, topic);
+            preparedStatement.setString(paramIndex++, server);
             for (int i = 0; i < types.length; i++) {
-                preparedStatement.setString(6 + i + types.length, types[i].trim());
+                preparedStatement.setString(paramIndex++, types[i].trim());
             }
-            preparedStatement.setInt(6 + types.length * 2, limitSelect);
+            preparedStatement.setInt(paramIndex++, limitSelect);
             try (ResultSet resultSet = preparedStatement.executeQuery()) {
                 while (resultSet.next()) {
 
