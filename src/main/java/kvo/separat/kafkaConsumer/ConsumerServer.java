@@ -68,6 +68,7 @@ public class ConsumerServer {
     private static Counter messagesProcessedFailed;
     private static Histogram processingLatency;
     private static final String ConsumerServer = "ConsumerServer";
+    private static final String ApplicationConsumerServer = "application";
     private static void initializeMonitoring() {
         try {
             // Создание Prometheus registry
@@ -76,34 +77,34 @@ public class ConsumerServer {
             // Инициализация метрик
             messagesConsumed = Counter.builder("consumer_messages_consumed_total")
                     .description("Total number consumer messages")
-                    .tag("application", ConsumerServer)
+                    .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registery);
 
             messagesProcessed = Counter.builder("messages_sent_total")
                     .description("Total number sent messages")
-                    .tag("application", ConsumerServer)
+                    .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registery);
 
            messagesSendingFailed = Counter.builder("messages_sent_failed_total")
                    .description("Total number failed sent messages")
-                   .tag("application", ConsumerServer)
+                   .tag(ApplicationConsumerServer, ConsumerServer)
                    .register(registery);
 
             messagesConsumerTimer = Timer.builder("messages_duration_seconds")
                     .description("Messages synchronization duration in seconds")
-                    .tag("application", ConsumerServer)
+                    .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registery);
             messagesProcessedTimer = Timer.builder("messages_sent_failed_duration")
                     .description("Total number Failed sent messages")
-                    .tag("application", ConsumerServer)
+                    .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registery);
             messagesConsumerFailed = Counter.builder("consumer_messages_failed_total")
                     .description("Total number failed consumer messages")
-                    .tag("application", ConsumerServer)
+                    .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registery);
             messagesProcessedFailed = Counter.builder("messages_sent_processed_failed_total")
                     .description("Total number failed processed messages")
-                    .tag("application", ConsumerServer)
+                    .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registery);
 // Инициализация Histogram через Prometheus client
             processingLatency = Histogram.build()

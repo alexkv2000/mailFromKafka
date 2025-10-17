@@ -86,7 +86,7 @@ public class MSSQLConnection {
             connection.setAutoCommit(false);
 
             //Выборка всех данных
-            logger.info("Данные из таблицы MSSQL temp_message (закачка Binary):");
+            logger.info("Data from the MSSQL temp_message table (Binary download):");
             statement = connection.createStatement();
 
             String selSQL = "SELECT ID, uuid, namefiles, status, type, bin FROM [dbo].[temp_message] WHERE status='new' AND uuid ='" + uuid + "';";
@@ -97,7 +97,7 @@ public class MSSQLConnection {
             }
 
             while (resultSet.next()) {
-                if (downloadToDirectory(uuid, file_Path, pathFiles, resultSet, null)) continue;
+                downloadToDirectory(uuid, file_Path, pathFiles, resultSet, null);
             }
 
             // Обновление статуса
@@ -107,11 +107,11 @@ public class MSSQLConnection {
             logger.info("Transaction with UUID :" + uuid + " - completed successfully");
 
         } catch (SQLException e) {
-            logger.error("Ошибка SQL / закрытии ресурсов: ", e.getMessage());
+            logger.error("SQL Error / Closing Resources : ", e.getMessage());
             try {
                 if (connection != null) connection.rollback();
             } catch (SQLException ex) {
-                logger.error("Ошибка при откате транзакции: ", ex);
+                logger.error("Error rolling back transaction: ", ex);
             }
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
@@ -120,45 +120,46 @@ public class MSSQLConnection {
                 if (statement != null) statement.close();
                 if (connection != null) connection.close();
             } catch (SQLException e) {
-                logger.error("Ошибка при закрытии ресурсов: ", e);
+                logger.error("Error closing resources: ", e);
             }
         }
         return pathFiles;
     }
 
-    private static boolean downloadToDirectory(UUID uuid, String file_Path, StringBuilder pathFiles, ResultSet resultSet, String name_file) {
+    private static void downloadToDirectory(UUID uuid, String file_Path, StringBuilder pathFiles, ResultSet resultSet, String name_file) {
         byte[] bin;
         String uuid_;
         Path filePathFull;
+        String downloadEscape = ". Vaccination missed.";
         try {
             name_file = resultSet.getString("namefiles").trim();
             // Проверка: если имя файла не указано (null, пустое или только пробелы), пропускаем закачку
             if (name_file == null || name_file.trim().isEmpty()) {
                 logger.warn("Filename is exception for UUID: " + uuid + ". Download missing.");
-                return true;
+                return;
             }
 
             // Проверка валидности имени файла
             if (!isValidFileName(name_file)) {
                 logger.warn("Uncorrected filename: '" + name_file + "' for UUID: " + uuid + ".  Download missing.");
-                return true;
+                return;
             }
 
             bin = resultSet.getBytes("bin");
             // Проверка наличия бинарных данных
             if (bin == null) {
-                logger.warn("Бинарные данные отсутствуют (null) для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
-                return true;
+                logger.warn("Binary data is missing (null) for the file: " + name_file + ", UUID: " + uuid + downloadEscape);
+                return;
             }
 
             byte[] fileBytes = Base64.getDecoder().decode(bin);
             // Дополнительная проверка: если бинарные данные пустые, пропускаем
             if (fileBytes == null || fileBytes.length == 0) {
-                logger.warn("Бинарные данные отсутствуют или пустые для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
-                return true;
+                logger.warn("Binary data is missing or empty for the file: " + name_file + ", UUID: " + uuid + downloadEscape);
+                return;
             }
 
-            logger.info("Данные из таблицы MSSQL temp_message (uuid) : " + uuid);
+            logger.info("Data from the table MSSQL temp_message (uuid) : " + uuid);
             uuid_ = resultSet.getString("uuid");
             Path targetDir = Path.of(file_Path, uuid_);
             Files.createDirectories(targetDir);
@@ -169,28 +170,23 @@ public class MSSQLConnection {
 
             // Проверка, не существует ли уже файл с таким именем
             if (Files.exists(filePathFull)) {
-                logger.warn("Файл уже существует: " + filePathFull + ". Закачка пропущена.");
-                return true;
+                logger.warn("File already exists: " + filePathFull + downloadEscape);
+                return;
             }
 
             Files.write(filePathFull, fileBytes);
             pathFiles.append(filePathFull.toString()).append(", ");
-            logger.info("Файл успешно загружен: " + filePathFull);
+            logger.info("File download : " + filePathFull);
 
         } catch (InvalidPathException e) {
-            logger.warn("Некорректный путь для файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-            return true;
+            logger.warn("Uncorrected path for file : '" + name_file + "' for UUID: " + uuid + downloadEscape + " Error: " + e.getMessage());
         } catch (IllegalArgumentException e) {
-            logger.warn("Ошибка декодирования Base64 для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-            return true;
+            logger.warn("Error decoder Base64 for : " + name_file + ", UUID: " + uuid + downloadEscape + " Error: " + e.getMessage());
         } catch (IOException e) {
-            logger.warn("Ошибка записи файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-            return true;
+            logger.warn("Error record file : '" + name_file + "' for UUID: " + uuid + downloadEscape + " Error: " + e.getMessage());
         } catch (Exception e) {
-            logger.warn("Неожиданная ошибка при обработке файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-            return true;
+            logger.warn("Mystics error for download file : '" + name_file + "' for UUID: " + uuid + downloadEscape + " Error: " + e.getMessage());
         }
-        return false;
     }
 
     public static void deleteDirectory(UUID uuid, String file_Path) {
@@ -236,13 +232,8 @@ public class MSSQLConnection {
                 return false;
             }
         }
-
         // Проверка длины имени файла
-        if (fileName.length() > 255) {
-            return false;
-        }
-
-        return true;
+        return fileName.length() <= 255;
     }
 
     private static String cleanFileName(String fileName) {
