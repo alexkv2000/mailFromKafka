@@ -59,17 +59,17 @@ public class DatabaseService {
         String insertSQL = "INSERT INTO messages (kafka_topic, message, date_create, server, typeMes, uuid) VALUES (?, ?, ?, ?, ?, ?)";
         try (Connection connection = getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(insertSQL)) {
-            for (ConsumerRecord<String, String> record : records) {
+            for (ConsumerRecord<String, String> recordMessage : records) {
                 int paramIndex = 1;
-                preparedStatement.setString(paramIndex++, record.topic());
-                preparedStatement.setString(paramIndex++, record.value());
+                preparedStatement.setString(paramIndex++, recordMessage.topic());
+                preparedStatement.setString(paramIndex++, recordMessage.value());
                 preparedStatement.setTimestamp(paramIndex++, new Timestamp(System.currentTimeMillis()));
                 preparedStatement.setString(paramIndex++, server);
                 preparedStatement.setString(paramIndex++, typeMessage);
                 preparedStatement.setString(paramIndex++, uuid);
-                preparedStatement.executeUpdate();
+                preparedStatement.addBatch(); //preparedStatement.executeUpdate(); восстановить при ошибке
             }
-
+            preparedStatement.executeBatch();
         } catch (SQLException e) {
             logger.error("Error inserting messages into database", e);
         }
@@ -113,7 +113,6 @@ public class DatabaseService {
         String placeholders = String.join(",", Collections.nCopies(types.length, "?"));
 
         String updateSQL = "UPDATE messages m1 JOIN (SELECT id FROM messages WHERE status IS NULL AND server = ? AND kafka_topic = ? AND typeMes IN (" + placeholders + ") LIMIT ?) m2 ON m1.id = m2.id SET m1.status = ?, m1.server = ?;";
-        //String updateSQL = "UPDATE messages m1 JOIN (SELECT id FROM messages WHERE status IS NULL AND server = ? AND kafka_topic = ? AND typeMes IN (?) LIMIT ?) m2 ON m1.id = m2.id SET m1.status = ?, m1.server = ?;";
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {
             int paramIndex = 1;
@@ -154,7 +153,6 @@ public class DatabaseService {
             logger.info("Database UPDATE Statue and Date_END");
         } catch (SQLException e) {
             logger.error("Error updating message status in database", e);
-            //          throw e;
         }
     }
 
@@ -171,7 +169,6 @@ public class DatabaseService {
                 }
             } catch (SQLException e) {
                 logger.error("Error select NUM_ATTEMPT on ID message ", e);
-                //          throw e;
             }
         }
         return 0;
@@ -217,7 +214,6 @@ public class DatabaseService {
         } catch (Exception e) {
             System.err.println("Ошибка при конвертации (JSON) ResultSet в MessageData: " + e.getMessage());
             return id_;
-            //throw new SQLException("Ошибка при конвертации (JSON) ResultSet в MessageData ", e);
         }
         return 0;
     }
@@ -254,7 +250,6 @@ public class DatabaseService {
                         id_error.add(getErrorMessage(resultSet));
                     }
                 }
-                //return aListMessage;
             }
         } catch (SQLException e) {
             logger.error("Error processing messages from database", e);

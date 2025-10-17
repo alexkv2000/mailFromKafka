@@ -3,11 +3,12 @@ package kvo.separat.kafkaSender.producer;
 import kvo.separat.kafkaSender.message.Message;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.clients.producer.Callback;
+import java.util.logging.Logger;
 
 //Отправка сообщений
 public class MessageSender {
     private final Producer producer;
-
+    Logger logger  = Logger.getLogger(getClass().getName());
     public MessageSender(Producer producer) {
         this.producer = producer;
     }
@@ -19,7 +20,7 @@ public class MessageSender {
                 if (exception != null) {
                     exception.printStackTrace();
                 } else {
-                    System.out.println("Message sent successfully: " + metadata.toString());
+                    logger.info("Message sent successfully: " + metadata.toString());
                 }
             }
         });

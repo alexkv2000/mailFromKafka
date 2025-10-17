@@ -67,6 +67,7 @@ public class ConsumerServer {
     private static Counter messagesConsumerFailed;
     private static Counter messagesProcessedFailed;
     private static Histogram processingLatency;
+    private static final String ConsumerServer = "ConsumerServer";
     private static void initializeMonitoring() {
         try {
             // Создание Prometheus registry
@@ -75,34 +76,34 @@ public class ConsumerServer {
             // Инициализация метрик
             messagesConsumed = Counter.builder("consumer_messages_consumed_total")
                     .description("Total number consumer messages")
-                    .tag("application","ConsumerServer")
+                    .tag("application", ConsumerServer)
                     .register(registery);
 
             messagesProcessed = Counter.builder("messages_sent_total")
                     .description("Total number sent messages")
-                    .tag("application","ConsumerServer")
+                    .tag("application", ConsumerServer)
                     .register(registery);
 
            messagesSendingFailed = Counter.builder("messages_sent_failed_total")
                    .description("Total number failed sent messages")
-                   .tag("application","ConsumerServer")
+                   .tag("application", ConsumerServer)
                    .register(registery);
 
             messagesConsumerTimer = Timer.builder("messages_duration_seconds")
                     .description("Messages synchronization duration in seconds")
-                    .tag("application","ConsumerServer")
+                    .tag("application", ConsumerServer)
                     .register(registery);
-            messagesProcessedTimer = Timer.builder("messages_sent_failed_total")
+            messagesProcessedTimer = Timer.builder("messages_sent_failed_duration")
                     .description("Total number Failed sent messages")
-                    .tag("application","ConsumerServer")
+                    .tag("application", ConsumerServer)
                     .register(registery);
             messagesConsumerFailed = Counter.builder("consumer_messages_failed_total")
                     .description("Total number failed consumer messages")
-                    .tag("application","ConsumerServer")
+                    .tag("application", ConsumerServer)
                     .register(registery);
             messagesProcessedFailed = Counter.builder("messages_sent_processed_failed_total")
                     .description("Total number failed processed messages")
-                    .tag("application","ConsumerServer")
+                    .tag("application", ConsumerServer)
                     .register(registery);
 // Инициализация Histogram через Prometheus client
             processingLatency = Histogram.build()
@@ -118,18 +119,17 @@ public class ConsumerServer {
             new UptimeMetrics().bindTo(registery);
 
             // Запуск HTTP сервера для Prometheus
-            //     ДОБАВЛНО ВМЕСТО  -  HTTPServer server = new HTTPServer(8080);
             CollectorRegistry collectorRegistry = registery.getPrometheusRegistry();
 
             metricsServer = new HTTPServer.Builder()
-                    .withPort(8080)
+                    .withPort(9090)
                     .withRegistry(collectorRegistry)
                     .build();
 
-            logger.info("sync-app metrics server started on http://......:8080/metrics");
+            logger.info("Metrics server started on http://......:9090/metrics");
 
         } catch (Exception e) {
-            logger.error("Failed to initialize monitoring in sync-app", e);
+            logger.error("Failed to initialize monitoring in ConsumerServer", e);
         }
     }
     public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService,
@@ -284,11 +284,6 @@ public class ConsumerServer {
         }
     }
 
-    private void handleProcessingError(MessageData message, SQLException e) {
-        logger.error("Ошибка процесса обработки сообщения ID: {}", message.getId(), e);
-        updateMessageStatus(String.valueOf(message.getId()), "error");
-    }
-
     public void start() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
@@ -320,26 +315,25 @@ public class ConsumerServer {
                 .filter(this::isValidMessage)
                 .map(this::processSingleMessageAsync)
                 .toList();
-        //.collect(Collectors.toList()); //заменил на  .toList();
 
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
     private void addCorrectDataJSONFromBrokerToDBSQL(List<ConsumerRecord<String, String>> recordList) {
-        for (ConsumerRecord<String, String> record : recordList) {
+        for (ConsumerRecord<String, String> recordMessage : recordList) {
             try {
-                JSONObject json = new JSONObject(record.value());
+                JSONObject json = new JSONObject(recordMessage.value());
                 // Проверяем наличие ключа "typeMes" и вставляем в БД
                 if (json.has("typeMes")) {
                     String extractedTypeMes = json.getString("typeMes");  // Извлекаем значение {typeMes} как строку
                     String extractedUUID = json.getString("uuid"); // Извлекаем значение {uuid} как строку
-                    databaseService.insertMessages(Collections.singletonList(record), extractedTypeMes, extractedUUID);
+                    databaseService.insertMessages(Collections.singletonList(recordMessage), extractedTypeMes, extractedUUID);
                     messagesConsumed.increment();
                 } else {
-                    logger.warn("Ключ 'typeMes' отсутствует в JSON-сообщении: {}", record.value());
+                    logger.warn("Ключ 'typeMes' отсутствует в JSON-сообщении: {}", recordMessage.value());
                 }
             } catch (JSONException e) {
-                logger.error("Ошибка обработки JSON в сообщении (возможно, некорректный JSON или typeMes): {}", record.value(), e);
+                logger.error("Ошибка обработки JSON в сообщении (возможно, некорректный JSON или typeMes): {}", recordMessage.value(), e);
             }
         }
     }

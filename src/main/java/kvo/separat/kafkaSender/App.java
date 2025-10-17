@@ -9,15 +9,16 @@ import org.json.JSONObject;
 
 import java.time.format.DateTimeFormatter;
 import java.util.Properties;
-
+import java.util.logging.Logger;
 import static java.time.LocalTime.now;
 
 public class App {
+    static Logger logger  = Logger.getLogger(App.class.getName());
     public static void main(String[] args) {
+
         String startDate = now().format(DateTimeFormatter.ofPattern("HH:mm:ss"));
         // Настройки для подключения к Kafka
         Properties props = new Properties();
-        //props.put("bootstrap.servers", "172.18.8.60:9092,172.18.2.198:9092");
         props.put("bootstrap.servers", "172.18.2.198:9092,172.18.8.60:9092");
         props.put("acks", "all");
         props.put("retries", "3");
@@ -26,12 +27,9 @@ public class App {
 
         // Создание KafkaProducer
         KafkaProducer<String, String> producer = new KafkaProducer<>(props);
-        //StringBuilder sbName = new StringBuilder();
         for (int i = 0; i < 1; i++) {
-           // sbName.append("test").append(i);
             JSONObject msg = new JSONObject();
             msg.put("To", "KvochkinAY@itsnn.ru");
-           // msg.put("ToСС", "AlexKv2000@mail.ru");
             msg.put("Caption", String.format("%s %d: %s ", "Потоков 20: Тема сообщения ", i,  now().format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
             msg.put("Body", String.format("%s : %d %s","Тело сообщения", i, "сообщение"));
             // Создание массива URLS
@@ -42,25 +40,24 @@ public class App {
             urls.put("http://crewmarket.net/wp-content/uploads/application_form.xls");
             // Добавление массива URLS в JSON объект
             msg.put("Url", urls);
-           // sbName.delete(0,20);
             sendMessage(producer, "topicDVMessage", msg);
         }
         // Закрытие producer
         producer.close();
-        System.out.println("Дата старта    : " + startDate + "\nДата окончания : " + now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
+        logger.info("Дата старта    : " + startDate + ". Дата окончания : " + now().format(DateTimeFormatter.ofPattern("HH:mm:ss")));
     }
 
     private static void sendMessage(KafkaProducer<String, String> producer, String topic, JSONObject message) {
         // Отправка сообщения в Kafka
-        ProducerRecord<String, String> record = new ProducerRecord<>(topic, message.toString());
+        ProducerRecord<String, String> recordTopicMessage = new ProducerRecord<>(topic, message.toString());
 
-        producer.send(record, new Callback() {
+        producer.send(recordTopicMessage, new Callback() {
             @Override
             public void onCompletion(RecordMetadata metadata, Exception exception) {
                 if (exception != null) {
                     exception.printStackTrace();
                 } else {
-                    System.out.println("Message sent successfully: " + metadata.toString());
+                    logger.info("Message sent successfully: " + metadata.toString());
                 }
             }
         });

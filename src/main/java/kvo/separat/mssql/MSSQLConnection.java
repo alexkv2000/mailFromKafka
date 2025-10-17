@@ -1,6 +1,5 @@
 package kvo.separat.mssql;
 
-import kvo.separat.kafkaConsumer.ConfigLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,17 +25,13 @@ public class MSSQLConnection {
             PreparedStatement preparedStatement = connection.prepareStatement(deleteSQL);
 
             int totalRowsAffected = 0;
-//            for (Integer id : idToDelete) {
                 preparedStatement.setString(1, uuid);
-//                preparedStatement.addBatch();  // Добавляем в пакет
-//            }
 
             int[] batchResults = preparedStatement.executeBatch();  // Выполняем пакет
             totalRowsAffected = Arrays.stream(batchResults).sum();
-
-            System.out.println("Удалено строк: " + totalRowsAffected);
+            logger.info("Delete rows from DB (MSSQL): " + totalRowsAffected);
         } catch (SQLException e) {
-            System.err.println("Ошибка SQL: " + e.getMessage());
+            logger.error("Error MSSQL (delete from DB): " + e.getMessage());
         }
     }
 
@@ -48,9 +43,9 @@ public class MSSQLConnection {
             preparedStatement.setString(1, data.toString());
             int[] batchResults = preparedStatement.executeBatch();  // Выполняем пакет
             totalRowsAffected = Arrays.stream(batchResults).sum();
-            logger.info("Удалено из истории {} Binary файлов (MSSQL база)", totalRowsAffected);
+            logger.info("Delete from history {" + totalRowsAffected + "} Binary files (DB MSSQL)");
         } catch (SQLException e) {
-            logger.error("Ошибка удаления из истории Binary файлов (MSSQL база): " + e.getMessage());
+            logger.error("Error delete from history Binary files (MSSQL база): " + e.getMessage());
         }
     }
 
@@ -63,10 +58,9 @@ public class MSSQLConnection {
             preparedStatement.setString(2, uuid);
 
             int rowsAffected = preparedStatement.executeUpdate();
-            System.out.println("Обновлено строк: " + rowsAffected);
-
+            logger.info("Update rows from DB (MSSQL): " + rowsAffected);
         } catch (SQLException e) {
-            System.err.println("Ошибка SQL: " + e.getMessage());
+            logger.error("Error MSSQL (update from DB): " + e.getMessage());
         }
     }
 
@@ -76,7 +70,7 @@ public class MSSQLConnection {
             resultSet = statement.executeQuery(select);
             return resultSet;
         } catch (SQLException e) {
-            System.err.println("Ошибка SQL: " + e.getMessage());
+            logger.info("Error SQL " + e.getMessage());
         }
         return resultSet;
     }
@@ -92,93 +86,28 @@ public class MSSQLConnection {
             connection.setAutoCommit(false);
 
             //Выборка всех данных
-            System.out.println("Данные из таблицы MSSQL temp_message (закачка Binary):");
+            logger.info("Данные из таблицы MSSQL temp_message (закачка Binary):");
             statement = connection.createStatement();
 
             String selSQL = "SELECT ID, uuid, namefiles, status, type, bin FROM [dbo].[temp_message] WHERE status='new' AND uuid ='" + uuid + "';";
             ResultSet resultSet = selectSQL(statement, selSQL);
             if (resultSet == null) {
-                System.err.println("MessageData или Urls отсутствуют");
+                logger.info("MessageData or Urls exception");
                 return pathFiles;
             }
 
-            Path filePathFull = null;
             while (resultSet.next()) {
-                String name_file = null;
-                byte[] bin = null;
-                String uuid_ = null;
-
-                try {
-                    name_file = resultSet.getString("namefiles").trim();
-                    // Проверка: если имя файла не указано (null, пустое или только пробелы), пропускаем закачку
-                    if (name_file == null || name_file.trim().isEmpty()) {
-                        logger.warn("Имя файла отсутствует для UUID: " + uuid + ". Закачка пропущена.");
-                        continue;
-                    }
-
-                    // Проверка валидности имени файла
-                    if (!isValidFileName(name_file)) {
-                        logger.warn("Некорректное имя файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена.");
-                        continue;
-                    }
-
-                    bin = resultSet.getBytes("bin");
-                    // Проверка наличия бинарных данных
-                    if (bin == null) {
-                        logger.warn("Бинарные данные отсутствуют (null) для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
-                        continue;
-                    }
-
-                    byte[] fileBytes = Base64.getDecoder().decode(bin);
-                    // Дополнительная проверка: если бинарные данные пустые, пропускаем
-                    if (fileBytes == null || fileBytes.length == 0) {
-                        logger.warn("Бинарные данные отсутствуют или пустые для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
-                        continue;
-                    }
-
-                    logger.info("Данные из таблицы MSSQL temp_message (uuid) : " + uuid);
-                    uuid_ = resultSet.getString("uuid");
-                    Path targetDir = Path.of(file_Path, uuid_);
-                    Files.createDirectories(targetDir);
-
-                    // Очистка имени файла от недопустимых символов и создание безопасного имени
-                    String safeFileName = cleanFileName(name_file);
-                    filePathFull = targetDir.resolve(safeFileName);
-
-                    // Проверка, не существует ли уже файл с таким именем
-                    if (Files.exists(filePathFull)) {
-                        logger.warn("Файл уже существует: " + filePathFull + ". Закачка пропущена.");
-                        continue;
-                    }
-
-                    Files.write(filePathFull, fileBytes);
-                    pathFiles.append(filePathFull.toString()).append(", ");
-                    logger.info("Файл успешно загружен: " + filePathFull);
-
-                } catch (InvalidPathException e) {
-                    logger.warn("Некорректный путь для файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-                    continue;
-                } catch (IllegalArgumentException e) {
-                    logger.warn("Ошибка декодирования Base64 для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-                    continue;
-                } catch (IOException e) {
-                    logger.warn("Ошибка записи файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-                    continue;
-                } catch (Exception e) {
-                    logger.warn("Неожиданная ошибка при обработке файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
-                    continue;
-                }
+                if (downloadToDirectory(uuid, file_Path, pathFiles, resultSet, null)) continue;
             }
 
             // Обновление статуса
             updateStatusSQL(connection, String.valueOf(uuid), "update");
 
             connection.commit();
-            System.out.println("Транзакция с UUID :" + uuid + " - успешно завершена");
+            logger.info("Transaction with UUID :" + uuid + " - completed successfully");
 
         } catch (SQLException e) {
-            System.err.println("Ошибка SQL / закрытии ресурсов: " + e.getMessage());
-            logger.error("Ошибка SQL / закрытии ресурсов: ", e);
+            logger.error("Ошибка SQL / закрытии ресурсов: ", e.getMessage());
             try {
                 if (connection != null) connection.rollback();
             } catch (SQLException ex) {
@@ -191,12 +120,79 @@ public class MSSQLConnection {
                 if (statement != null) statement.close();
                 if (connection != null) connection.close();
             } catch (SQLException e) {
-                System.err.println("Ошибка при закрытии ресурсов: " + e.getMessage());
                 logger.error("Ошибка при закрытии ресурсов: ", e);
             }
         }
         return pathFiles;
     }
+
+    private static boolean downloadToDirectory(UUID uuid, String file_Path, StringBuilder pathFiles, ResultSet resultSet, String name_file) {
+        byte[] bin;
+        String uuid_;
+        Path filePathFull;
+        try {
+            name_file = resultSet.getString("namefiles").trim();
+            // Проверка: если имя файла не указано (null, пустое или только пробелы), пропускаем закачку
+            if (name_file == null || name_file.trim().isEmpty()) {
+                logger.warn("Filename is exception for UUID: " + uuid + ". Download missing.");
+                return true;
+            }
+
+            // Проверка валидности имени файла
+            if (!isValidFileName(name_file)) {
+                logger.warn("Uncorrected filename: '" + name_file + "' for UUID: " + uuid + ".  Download missing.");
+                return true;
+            }
+
+            bin = resultSet.getBytes("bin");
+            // Проверка наличия бинарных данных
+            if (bin == null) {
+                logger.warn("Бинарные данные отсутствуют (null) для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
+                return true;
+            }
+
+            byte[] fileBytes = Base64.getDecoder().decode(bin);
+            // Дополнительная проверка: если бинарные данные пустые, пропускаем
+            if (fileBytes == null || fileBytes.length == 0) {
+                logger.warn("Бинарные данные отсутствуют или пустые для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена.");
+                return true;
+            }
+
+            logger.info("Данные из таблицы MSSQL temp_message (uuid) : " + uuid);
+            uuid_ = resultSet.getString("uuid");
+            Path targetDir = Path.of(file_Path, uuid_);
+            Files.createDirectories(targetDir);
+
+            // Очистка имени файла от недопустимых символов и создание безопасного имени
+            String safeFileName = cleanFileName(name_file);
+            filePathFull = targetDir.resolve(safeFileName);
+
+            // Проверка, не существует ли уже файл с таким именем
+            if (Files.exists(filePathFull)) {
+                logger.warn("Файл уже существует: " + filePathFull + ". Закачка пропущена.");
+                return true;
+            }
+
+            Files.write(filePathFull, fileBytes);
+            pathFiles.append(filePathFull.toString()).append(", ");
+            logger.info("Файл успешно загружен: " + filePathFull);
+
+        } catch (InvalidPathException e) {
+            logger.warn("Некорректный путь для файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
+            return true;
+        } catch (IllegalArgumentException e) {
+            logger.warn("Ошибка декодирования Base64 для файла: " + name_file + ", UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
+            return true;
+        } catch (IOException e) {
+            logger.warn("Ошибка записи файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
+            return true;
+        } catch (Exception e) {
+            logger.warn("Неожиданная ошибка при обработке файла: '" + name_file + "' для UUID: " + uuid + ". Закачка пропущена. Ошибка: " + e.getMessage());
+            return true;
+        }
+        return false;
+    }
+
     public static void deleteDirectory(UUID uuid, String file_Path) {
         deleteDirectoryRecurs(Path.of(file_Path + uuid));
         logger.info("Deleted directory success: " + file_Path + uuid);
@@ -215,7 +211,6 @@ public class MSSQLConnection {
                     });
         } catch (IOException e) {
             logger.error("Error walking directory: " + path + " ", e);
-//            throw new RuntimeException(e); //не нужно проброса, просто изнорируем
         }
     }
     private static boolean isValidFileName(String fileName) {

@@ -8,7 +8,6 @@ import jakarta.mail.Session;
 import jakarta.mail.*;
 import jakarta.mail.internet.*;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Properties;
 
 
@@ -71,14 +70,7 @@ public class EmailService {
             message.setContent(multipart);
             int num_attempts = NUM_ATTEMPT;
             while (num_attempts != 0) {
-                try {
-                    Transport.send(message);
-                    logger.info("Email sent successfully " + message.getSubject() + " " + Message.RecipientType.TO);
-                    break;
-                } catch (Exception ee) {
-                    ee.printStackTrace();
-                    logger.error("An error 'sendEmail' (To or ToCC)" + message.getSubject() + " To:" + Message.RecipientType.TO + " ToCC:" + Message.RecipientType.CC, ee);
-                }
+                sendMessageToMail(message);
                 num_attempts--;
             }
             logger.info("Email " + message.getSubject() + "sent successfully to: " + to);
@@ -86,6 +78,16 @@ public class EmailService {
             logger.error("Error sending email", e);
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private static void sendMessageToMail(Message message) throws MessagingException {
+        try {
+            Transport.send(message);
+            logger.info("Email sent successfully " + message.getSubject() + " " + Message.RecipientType.TO);
+        } catch (Exception ee) {
+            ee.printStackTrace();
+            logger.error("An error 'sendEmail' (To or ToCC)" + message.getSubject() + " To:" + Message.RecipientType.TO + " ToCC:" + Message.RecipientType.CC, ee);
         }
     }
 }
