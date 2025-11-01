@@ -1,6 +1,7 @@
 package kvo.separat.kafkaConsumer;
 
-import io.prometheus.client.Histogram;
+//import io.prometheus.client.Histogram;
+
 import kvo.separat.mssql.MSSQLConnection;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.json.JSONException;
@@ -39,7 +40,7 @@ import java.util.stream.StreamSupport;
 import static java.lang.Thread.sleep;
 
 public class ConsumerServer {
-    private static PrometheusMeterRegistry registery;
+    private static PrometheusMeterRegistry registry;
     private static final Logger logger = LoggerFactory.getLogger(ConsumerServer.class);
 
     private static HTTPServer metricsServer;
@@ -61,66 +62,70 @@ public class ConsumerServer {
     private int deleteAfterDay;
     private static Counter messagesConsumed;
     private static Counter messagesProcessed;
-    private static Timer messagesProcessedTimer;
+    private static Timer messagesConsumerFailTimer;
     private static Counter messagesSendingFailed;
     private static Timer messagesConsumerTimer;
     private static Counter messagesConsumerFailed;
     private static Counter messagesProcessedFailed;
-    private static Histogram processingLatency;
+    private static Timer processingLatency;
     private static final String ConsumerServer = "ConsumerServer";
     private static final String ApplicationConsumerServer = "application";
+
     private static void initializeMonitoring() {
         try {
             // Создание Prometheus registry
-            registery = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+            registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
 
             // Инициализация метрик
             messagesConsumed = Counter.builder("consumer_messages_consumed_total")
                     .description("Total number consumer messages")
                     .tag(ApplicationConsumerServer, ConsumerServer)
-                    .register(registery);
+                    .register(registry);
 
             messagesProcessed = Counter.builder("messages_sent_total")
                     .description("Total number sent messages")
                     .tag(ApplicationConsumerServer, ConsumerServer)
-                    .register(registery);
+                    .register(registry);
 
-           messagesSendingFailed = Counter.builder("messages_sent_failed_total")
-                   .description("Total number failed sent messages")
-                   .tag(ApplicationConsumerServer, ConsumerServer)
-                   .register(registery);
+            messagesSendingFailed = Counter.builder("messages_sent_failed_total")
+                    .description("Total number failed sent messages")
+                    .tag(ApplicationConsumerServer, ConsumerServer)
+                    .register(registry);
 
             messagesConsumerTimer = Timer.builder("messages_duration_seconds")
                     .description("Messages synchronization duration in seconds")
                     .tag(ApplicationConsumerServer, ConsumerServer)
-                    .register(registery);
-            messagesProcessedTimer = Timer.builder("messages_sent_failed_duration")
-                    .description("Total number Failed sent messages")
+                    .register(registry);
+            messagesConsumerFailTimer = Timer.builder("messages_sent_failed_total")
+                    .description("Messages failed sent messages")
                     .tag(ApplicationConsumerServer, ConsumerServer)
-                    .register(registery);
+                    .register(registry);
             messagesConsumerFailed = Counter.builder("consumer_messages_failed_total")
                     .description("Total number failed consumer messages")
                     .tag(ApplicationConsumerServer, ConsumerServer)
-                    .register(registery);
+                    .register(registry);
             messagesProcessedFailed = Counter.builder("messages_sent_processed_failed_total")
                     .description("Total number failed processed messages")
                     .tag(ApplicationConsumerServer, ConsumerServer)
-                    .register(registery);
+                    .register(registry);
 // Инициализация Histogram через Prometheus client
-            processingLatency = Histogram.build()
-                    .name("processing_latency_seconds")
-                    .help("Latency of message processing in seconds.")
-                    .register();
-
+//            processingLatency = Histogram.build()
+//                    .name("processing_latency_seconds")
+//                    .help("Latency of message processing in seconds.")
+//                    .register();
+            processingLatency = Timer.builder("processing_latency_seconds")
+                    .description("Latency of message processing in seconds.")
+                    .tag(ApplicationConsumerServer, ConsumerServer)
+                    .register(registry);
             // Биндеры для мониторинга JVM
-            new JvmMemoryMetrics().bindTo(registery);
-            new JvmGcMetrics().bindTo(registery);
-            new JvmThreadMetrics().bindTo(registery);
-            new ProcessorMetrics().bindTo(registery);
-            new UptimeMetrics().bindTo(registery);
+            new JvmMemoryMetrics().bindTo(registry);
+            new JvmGcMetrics().bindTo(registry);
+            new JvmThreadMetrics().bindTo(registry);
+            new ProcessorMetrics().bindTo(registry);
+            new UptimeMetrics().bindTo(registry);
 
             // Запуск HTTP сервера для Prometheus
-            CollectorRegistry collectorRegistry = registery.getPrometheusRegistry();
+            CollectorRegistry collectorRegistry = registry.getPrometheusRegistry();
 
             metricsServer = new HTTPServer.Builder()
                     .withPort(9090)
@@ -133,6 +138,7 @@ public class ConsumerServer {
             logger.error("Failed to initialize monitoring in ConsumerServer", e);
         }
     }
+
     public ConsumerServer(KafkaConsumerWrapper kafkaConsumer, DatabaseService databaseService,
                           EmailService emailService, ConfigLoader configLoader) {
         this.kafkaConsumer = kafkaConsumer;
@@ -164,7 +170,7 @@ public class ConsumerServer {
         }, 0, 1, TimeUnit.DAYS);
 
         scheduler.scheduleWithFixedDelay(() -> {
-            Timer.Sample sample = Timer.start(registery); // Регистрируем Метрику
+            Timer.Sample sample = Timer.start(registry); // Регистрируем Метрику
             try {
                 setKafkaConsumer();
             } catch (Exception e) {
@@ -175,14 +181,14 @@ public class ConsumerServer {
         }, 0, 5, TimeUnit.SECONDS);
 
         scheduler.scheduleWithFixedDelay(() -> {
-            Timer.Sample sample = Timer.start(registery); // Регистрируем Метрику
+            Timer.Sample sample = Timer.start(registry); // Регистрируем Метрику
             try {
                 processMessages();
             } catch (Exception e) {
                 logger.error("Error in processMessages", e);
                 messagesProcessedFailed.increment(); // ошибка отправки сообщения
             }
-            sample.stop(messagesProcessedTimer); // Стоп Метрика
+            sample.stop(messagesConsumerFailTimer); // Стоп Метрика
         }, 0, 5, TimeUnit.SECONDS);
 
     }
@@ -240,40 +246,51 @@ public class ConsumerServer {
             }
         }
         return CompletableFuture.runAsync(() -> {
-            Histogram.Timer timer = processingLatency.startTimer();
+            Timer.Sample timer = Timer.start(registry);
             try {
                 StringBuilder filePathBuilder = MSSQLConnection.DownloadBinaryDV(
                         message.getUuid(), urlMssql, userMssql, passwordMssql, filePath);
-
+                if (filePathBuilder == null) {
+                    logger.error("Failed to download binary for UUID: {}", message.getUuid());
+                    updateMessageStatusWithError(message, "download_error");
+                    messagesSendingFailed.increment();  // Или новый счетчик для download failures
+                    return;
+                }
                 emailService.sendMail(message.getTo(), message.getToCC(), message.getBCC(),
-                        message.getCaption(), message.getBody(), filePathBuilder.toString());
-
+                            message.getCaption(), message.getBody(), filePathBuilder.toString());
                 cleanupTempFiles(String.valueOf(message.getUuid()));
                 updateMessageStatus(String.valueOf(message.getId()), "send");
-
                 messagesProcessed.increment();
-
             } catch (IOException e) {
                 messagesSendingFailed.increment();
                 logger.error("IO error processing message ID: {}", message.getId(), e);
                 updateMessageStatusWithError(message, "IO error");
             } finally {
-                timer.observeDuration();
+                timer.stop(processingLatency);
             }
         }, executor);
     }
 
     private void cleanupTempFiles(String uuid) {
-        Path tempDir = Paths.get(filePath + uuid);
-        if (Files.exists(tempDir)) {
-            MSSQLConnection.deleteDirectory(UUID.fromString(uuid), filePath);
+        if (uuid == null || uuid.isEmpty()) return;
+        Path tempDir = Paths.get(filePath, uuid);
+        try {
+            UUID uuidObj = UUID.fromString(uuid);
+            if (Files.exists(tempDir)) {
+                MSSQLConnection.deleteDirectory(uuidObj, filePath);
+            }
+        } catch (IllegalArgumentException e) {
+            logger.error("Invalid UUID '{}' for cleanup", uuid, e);
         }
     }
 
     private void updateMessageStatus(String messageId, String status) {
         try {
-            databaseService.updateMessageStatusDate(topic, server, Integer.valueOf(messageId),
+            int id = Integer.parseInt(messageId.trim());
+            databaseService.updateMessageStatusDate(topic, server, id,
                     status, new Timestamp(System.currentTimeMillis()));
+        } catch (NumberFormatException e) {
+            logger.error("Invalid messageId '{}' (not a number) for status '{}'", messageId, status, e);
         } catch (SQLException e) {
             logger.error("Ошибка обновления Статуса '{}' для сообщения с ID: {}", status, messageId, e);
         }
@@ -292,10 +309,10 @@ public class ConsumerServer {
                 sleep(threadSleep);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                logger.info("Поток прерван, останавливается");
+                logger.info("Interrupted, stop");
                 break;
             } catch (Exception e) {
-                logger.error("Ошибка в main процессе цикла loop", e);
+                logger.error("Error in main process loop", e);
             }
         }
     }
@@ -308,7 +325,7 @@ public class ConsumerServer {
         List<MessageData> resultSet = databaseService.selectMessages(topic, server, typeMes, limitSelect);
 
         if (resultSet == null || resultSet.isEmpty()) {
-            logger.debug("Нет сообщений для обработки ");
+            logger.debug("No messages for processing");
             return;
         }
 
@@ -325,7 +342,7 @@ public class ConsumerServer {
             try {
                 JSONObject json = new JSONObject(recordMessage.value());
                 // Проверяем наличие ключа "typeMes" и вставляем в БД
-                if (json.has("typeMes")) {
+                if (json.has("typeMes") && json.has("uuid")) { // добавил && json.has("uuid")
                     String extractedTypeMes = json.getString("typeMes");  // Извлекаем значение {typeMes} как строку
                     String extractedUUID = json.getString("uuid"); // Извлекаем значение {uuid} как строку
                     databaseService.insertMessages(Collections.singletonList(recordMessage), extractedTypeMes, extractedUUID);
@@ -365,7 +382,8 @@ public class ConsumerServer {
 
     public static void main(String[] args) throws IOException {
         String currentDir = System.getProperty("user.dir");
-        String configPath = currentDir + "/config/setting.txt";
+//        String configPath = currentDir + "/config/setting.txt";
+        String configPath = Paths.get(currentDir, "config", "setting.txt").toString();
         boolean useWhileLoop = false;
 
         for (String arg : args) {
@@ -376,7 +394,7 @@ public class ConsumerServer {
             }
         }
 
-        logger.info("Старовала схема : {}", useWhileLoop ? "While-Loop" : "Scheduled");
+        logger.info("Start scheme  : {}", useWhileLoop ? "While-Loop" : "Scheduled");
 
         ConfigLoader configLoader = new ConfigLoader(configPath);
         KafkaConsumerWrapper kafkaConsumer = new KafkaConsumerWrapper(configLoader);
