@@ -96,7 +96,7 @@ public class ConsumerServer {
                     .description("Messages synchronization duration in seconds")
                     .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registry);
-            messagesConsumerFailTimer = Timer.builder("messages_sent_failed_total")
+            messagesConsumerFailTimer = Timer.builder("messages_consumer_failed_total")
                     .description("Messages failed sent messages")
                     .tag(ApplicationConsumerServer, ConsumerServer)
                     .register(registry);
@@ -257,7 +257,7 @@ public class ConsumerServer {
                     return;
                 }
                 emailService.sendMail(message.getTo(), message.getToCC(), message.getBCC(),
-                            message.getCaption(), message.getBody(), filePathBuilder.toString());
+                        message.getCaption(), message.getBody(), filePathBuilder.toString());
                 cleanupTempFiles(String.valueOf(message.getUuid()));
                 updateMessageStatus(String.valueOf(message.getId()), "send");
                 messagesProcessed.increment();

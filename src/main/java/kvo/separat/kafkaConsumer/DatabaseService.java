@@ -67,9 +67,10 @@ public class DatabaseService {
                 preparedStatement.setString(paramIndex++, server);
                 preparedStatement.setString(paramIndex++, typeMessage);
                 preparedStatement.setString(paramIndex++, uuid);
-                preparedStatement.addBatch(); //preparedStatement.executeUpdate(); восстановить при ошибке
+                //preparedStatement.addBatch(); //пошли дубли рассылки сообщений
+                preparedStatement.executeUpdate();
             }
-            preparedStatement.executeBatch();
+//            preparedStatement.executeBatch();  //пошли дубли рассылки сообщений
         } catch (SQLException e) {
             logger.error("Error inserting messages into database", e);
         }

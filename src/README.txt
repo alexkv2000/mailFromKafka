@@ -9,11 +9,11 @@
 ## 🚀 Запуск
 ### Обычный режим:
 ```bash
-java -jar app.jar
+java.exe -Xmx1G -cp "MailToKafka-1.0.5.jar;.\lib\mysql-connector-j-8.0.33.jar" kvo.separat.kafkaConsumer.ConsumerServer --config.path=C:\projects\config\setting.txt > log_MailToKafka.txt
 
 ### Режим бесконечного цикла:
 ```bash
-java -jar app.jar while=true
+java.exe -Xmx1G -cp "MailToKafka-1.0.3.jar;.\lib\mysql-connector-j-8.0.33.jar while=true" kvo.separat.kafkaConsumer.ConsumerServer --config.path=C:\projects\config\setting.txt > log_MailToKafka.txt
 
 ## Настройка
 - в корневом каталоге (где находится исполняемый файл jar) создать каталог 'config'
