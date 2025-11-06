@@ -417,9 +417,9 @@ public class ConsumerServer {
         ConsumerServer consumerServer = new ConsumerServer(kafkaConsumer, databaseService, emailService, configLoader);
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            logger.info("Послан сигнал остановки приложения");
+            logger.info("Stopping");
             consumerServer.stopProcessing();
-            logger.info("Приложение остановлено корректно");
+            logger.info("Stop application currently");
         }));
 
         if (useWhileLoop) {

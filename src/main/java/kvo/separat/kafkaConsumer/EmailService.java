@@ -76,7 +76,7 @@ public class EmailService {
                 num_attempts--;
                 Thread.sleep(THREAD_SLEEP);
             }
-            logger.info("Email " + message.getSubject() + " sent successfully to: " + to + " => Attempts left: " + num_attempts--);
+            logger.info("Email " + message.getSubject() + " sent successfully to: " + to + " => Attempts left: " + --num_attempts);
         } catch (MessagingException e) {
             logger.error("Error sending email ", e);
         } catch (IOException | InterruptedException e) {
