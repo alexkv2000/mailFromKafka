@@ -12,6 +12,7 @@ import java.util.Properties;
 
 
 public class EmailService {
+    private final int THREAD_SLEEP;
     private final int NUM_ATTEMPT;
     private static final Logger logger = LoggerFactory.getLogger(EmailService.class);
     private final String email;
@@ -23,6 +24,7 @@ public class EmailService {
         this.password = configLoader.getProperty("PASSWORD");
         this.smtpServer = configLoader.getProperty("SMTP_SERVER");
         this.NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
+        this.THREAD_SLEEP = Integer.parseInt(configLoader.getProperty("THREAD_SLEEP"));
     }
 
     public void sendMail(String to, String toCC, String BCC, String caption, String body, String filePaths) {
@@ -69,25 +71,28 @@ public class EmailService {
 
             message.setContent(multipart);
             int num_attempts = NUM_ATTEMPT;
-            while (num_attempts != 0) {
-                sendMessageToMail(message);
+            while (num_attempts >= 1) {
+                if (sendMessageToMail(message)) {break;};
                 num_attempts--;
+                Thread.sleep(THREAD_SLEEP);
             }
-            logger.info("Email " + message.getSubject() + "sent successfully to: " + to);
+            logger.info("Email " + message.getSubject() + " sent successfully to: " + to + " => Attempts left: " + num_attempts--);
         } catch (MessagingException e) {
-            logger.error("Error sending email", e);
-        } catch (IOException e) {
+            logger.error("Error sending email ", e);
+        } catch (IOException | InterruptedException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static void sendMessageToMail(Message message) throws MessagingException {
+    private static boolean sendMessageToMail(Message message) throws MessagingException {
         try {
             Transport.send(message);
             logger.info("Email sent successfully " + message.getSubject() + " " + Message.RecipientType.TO);
+            return true;
         } catch (Exception ee) {
             ee.printStackTrace();
             logger.error("An error 'sendEmail' (To or ToCC)" + message.getSubject() + " To:" + Message.RecipientType.TO + " ToCC:" + Message.RecipientType.CC, ee);
+            return false;
         }
     }
 }

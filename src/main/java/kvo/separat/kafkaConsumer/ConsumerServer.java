@@ -29,6 +29,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -261,10 +262,10 @@ public class ConsumerServer {
                 cleanupTempFiles(String.valueOf(message.getUuid()));
                 updateMessageStatus(String.valueOf(message.getId()), "send");
                 messagesProcessed.increment();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 messagesSendingFailed.increment();
-                logger.error("IO error processing message ID: {}", message.getId(), e);
-                updateMessageStatusWithError(message, "IO error");
+                logger.error("Error processing message ID: {}", message.getId(), e);
+                updateMessageStatusWithError(message, "processing_error"); // 06.11.2026 TODO после теста вернуть на "error"
             } finally {
                 timer.stop(processingLatency);
             }
@@ -281,6 +282,8 @@ public class ConsumerServer {
             }
         } catch (IllegalArgumentException e) {
             logger.error("Invalid UUID '{}' for cleanup", uuid, e);
+        } catch (Exception e) {
+            logger.error("Error ConsumerServer->cleanupTempFiles UUID '{}' for cleanup", uuid, e);
         }
     }
 
@@ -293,7 +296,10 @@ public class ConsumerServer {
             logger.error("Invalid messageId '{}' (not a number) for status '{}'", messageId, status, e);
         } catch (SQLException e) {
             logger.error("Ошибка обновления Статуса '{}' для сообщения с ID: {}", status, messageId, e);
+        } catch (Exception e) {
+            logger.error("Error ConsumerServer->updateMessageStatus '{}' for message ID: {}", status, messageId, e);
         }
+
     }
 
     private void updateMessageStatusWithError(MessageData message, String errorType) {
@@ -352,6 +358,8 @@ public class ConsumerServer {
                 }
             } catch (JSONException e) {
                 logger.error("Ошибка обработки JSON в сообщении (возможно, некорректный JSON или typeMes): {}", recordMessage.value(), e);
+            } catch (Exception e) {
+                logger.error("Error ConsumerServer->addCorrectDataJSONFromBrokerToDBSQL (mey be, uncorrected JSON / typeMes): {}", recordMessage.value(), e);
             }
         }
     }
@@ -377,6 +385,11 @@ public class ConsumerServer {
             scheduler.shutdownNow();
             executor.shutdownNow();
             Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            scheduler.shutdownNow();
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+            logger.error("Error ConsumerServer->stopProcessing ");
         }
     }
 
