@@ -1,11 +1,15 @@
 package kvo.separat.kafkaConsumer;
 
+import kvo.separat.mssql.MSSQLConnection;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class DatabaseService {
@@ -15,16 +19,91 @@ public class DatabaseService {
     private static String dbUrl = null;
     private static String user = null;
     private static String password = null;
+    private static String mssqlUrl = null;
+    private static String mssqlUser = null;
+    private static String mssqlPassword = null;
 
     public DatabaseService(ConfigLoader configLoader) {
         dbUrl = configLoader.getProperty("DB_PATH");
         user = configLoader.getProperty("USER_SQL");
         password = configLoader.getProperty("PASSWORD_SQL");
         NUM_ATTEMPT = Integer.parseInt(configLoader.getProperty("NUM_ATTEMPT"));
+
+        mssqlUrl = configLoader.getProperty("URL_MSSQL");
+        mssqlUser = configLoader.getProperty("USER_MSSQL");
+        mssqlPassword = configLoader.getProperty("PASSWORD_MSSQL");
     }
 
     public static Connection getConnection() throws SQLException {
         return DriverManager.getConnection(dbUrl, user, password);
+    }
+
+    public static void setStatisticSizeTable(String fileGroupName) throws ClassNotFoundException, SQLException {
+        try {
+            ResultSet resultSet;
+            resultSet = MSSQLConnection.getStatisticSizeTable(fileGroupName, mssqlUrl, mssqlUser, mssqlPassword);
+
+            String setStatisticSizeTableSQL;
+            Connection connection = DriverManager.getConnection(dbUrl, user, password);
+            setStatisticSizeTableSQL = "INSERT INTO table_sizes (TableName, FileGroupName, TotalSizeMB, UsedSizeMB, FreeSizeMB, DataSize) SELECT TABLE_NAME AS TableName, 'PRIMARY' AS FileGroupName, ROUND((data_length + index_length) / 1024 / 1024, 2) AS TotalSizeMB, ROUND(data_length / 1024 / 1024, 2) AS UsedSizeMB, ROUND(index_length / 1024 / 1024, 2) AS FreeSizeMB, DATE_FORMAT(NOW(), '%d-%m-%Y') AS DataSize FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY UsedSizeMB DESC;";
+            PreparedStatement insertStmt = connection.prepareStatement(setStatisticSizeTableSQL);
+            LocalDate currentDate = LocalDate.now();
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+            //Поиск даты обновления
+            String sql = "select max(DataSize) AS dateMax from table_sizes";
+            String dMax = "";
+            try (PreparedStatement pstmt = connection.prepareStatement(sql);
+                 ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    dMax = rs.getString("dateMax");  // Возвращает строку в формате dd-MM-yyyy или null, если нет данных
+                }
+            } catch (Exception e) {
+                connection.close();
+                e.printStackTrace();
+            }
+            if (Objects.equals(dMax, null)) {
+                dMax = "01-01-1900";
+            }
+            ;
+            //Обновить новыми данными
+            while (resultSet != null && resultSet.next()) {
+                String tableName = resultSet.getString("TableName");
+                String fileGroupNameValue = resultSet.getString("FileGroupName");
+                double totalSizeMB = resultSet.getDouble("TotalSizeMB");
+                double usedSizeMB = resultSet.getDouble("UsedSizeMB");
+                double freeSizeMB = resultSet.getDouble("FreeSizeMB");
+                String dataSize = resultSet.getString("DataSize");
+                LocalDate parsedDate = LocalDate.parse(dMax, formatter);
+                if (currentDate.isEqual(parsedDate)) {
+                    resultSet.close();
+                    break;
+                }
+                String insertSql = "INSERT INTO table_sizes (TableName, FileGroupName, TotalSizeMB, UsedSizeMB, FreeSizeMB, DataSize) VALUES ('" + tableName + "', '" + fileGroupNameValue + "', " + totalSizeMB + ", " + usedSizeMB + ", " + freeSizeMB + ", '" + dataSize + "');";
+                insertStmt.executeUpdate(insertSql);
+            }
+            assert resultSet != null;
+            resultSet.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static void printResultSet(ResultSet resultSet, boolean columnName) throws SQLException {
+        ResultSetMetaData metaData = resultSet.getMetaData();
+        int columnCount = metaData.getColumnCount();
+        if (columnName) { // Вывод заголовков столбцов
+            for (int i = 1; i <= columnCount; i++) {
+                System.out.print(metaData.getColumnName(i) + "\t");
+            }
+            System.out.println();
+        }
+        // Вывод данных строк
+        while (resultSet.next()) {
+            for (int i = 1; i <= columnCount; i++) {
+                System.out.print(resultSet.getString(i) + "\t");
+            }
+            System.out.println();
+        }
     }
 
     public void createTableIfNotExist() throws SQLException {
@@ -94,7 +173,7 @@ public class DatabaseService {
         updateParametersMessage(messageId, 0);
     }
 
-    public void updateParametersMessage(Integer messageId, Integer NUM_ATTEMPT){
+    public void updateParametersMessage(Integer messageId, Integer NUM_ATTEMPT) {
         String updateSQL = "UPDATE messages m SET m.status = NULL, m.date_end = NULL, m.server = '', m.NUM_ATTEMPT = " + NUM_ATTEMPT.toString() + " WHERE m.id = " + messageId.toString() + ";";
         try (Connection connection = getConnection();
              PreparedStatement updateStatement = connection.prepareStatement(updateSQL)) {

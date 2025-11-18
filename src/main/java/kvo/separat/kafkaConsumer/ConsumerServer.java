@@ -22,6 +22,7 @@ import io.micrometer.prometheus.PrometheusMeterRegistry;
 import io.prometheus.client.exporter.HTTPServer;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -30,10 +31,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -51,6 +49,7 @@ public class ConsumerServer {
     private final EmailService emailService;
     private final String topic;
     private final String server;
+    private final String serverSync;
     private final int limitSelect;
     private final ExecutorService executor;
     private final String typeMes;
@@ -147,6 +146,7 @@ public class ConsumerServer {
         this.emailService = emailService;
         this.topic = configLoader.getProperty("TOPIC");
         this.server = configLoader.getProperty("SERVER");
+        this.serverSync = configLoader.getProperty("SERVER.SYNC");
         this.limitSelect = Integer.parseInt(configLoader.getProperty("LIMIT_SELECT"));
         this.typeMes = configLoader.getProperty("TYPE_MES");
         this.filePath = configLoader.getProperty("FILE_PATH");
@@ -163,6 +163,13 @@ public class ConsumerServer {
         initializeMonitoring();
         scheduler.scheduleWithFixedDelay(() -> {
             try (Connection connection = DriverManager.getConnection(urlMssql, userMssql, passwordMssql)) {
+                String fileGroupName = "";
+
+                InetAddress localHost = InetAddress.getLocalHost();
+                String[] nameServer = localHost.getHostName().split("/");
+                if (Objects.equals(nameServer[0], serverSync)) {
+                    DatabaseService.setStatisticSizeTable(fileGroupName); // таблица размерности MSSQL для анализа роста БД
+                }
                 MSSQLConnection.deleteBinMoreSevenDays(connection, java.time.LocalDate.now());
                 DatabaseService.deleteOldMessages(deleteAfterDay);
             } catch (Exception e) {
@@ -295,7 +302,7 @@ public class ConsumerServer {
         } catch (NumberFormatException e) {
             logger.error("Invalid messageId '{}' (not a number) for status '{}'", messageId, status, e);
         } catch (SQLException e) {
-            logger.error("Ошибка обновления Статуса '{}' для сообщения с ID: {}", status, messageId, e);
+            logger.error("Error update status '{}' for message ID: {}", status, messageId, e);
         } catch (Exception e) {
             logger.error("Error ConsumerServer->updateMessageStatus '{}' for message ID: {}", status, messageId, e);
         }

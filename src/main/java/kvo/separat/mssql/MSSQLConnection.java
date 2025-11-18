@@ -1,5 +1,8 @@
 package kvo.separat.mssql;
 
+import kvo.separat.kafkaConsumer.ConfigLoader;
+import kvo.separat.kafkaConsumer.ConsumerServer;
+import kvo.separat.kafkaConsumer.DatabaseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +14,7 @@ import java.sql.*;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Objects;
 import java.util.UUID;
 
 public class MSSQLConnection {
@@ -25,7 +29,7 @@ public class MSSQLConnection {
             PreparedStatement preparedStatement = connection.prepareStatement(deleteSQL);
 
             int totalRowsAffected = 0;
-                preparedStatement.setString(1, uuid);
+            preparedStatement.setString(1, uuid);
 
             int[] batchResults = preparedStatement.executeBatch();  // Выполняем пакет
             totalRowsAffected = Arrays.stream(batchResults).sum();
@@ -75,7 +79,7 @@ public class MSSQLConnection {
         return resultSet;
     }
 
-    public static StringBuilder DownloadBinaryDV(UUID uuid, String URL, String  USER, String  PASSWORD, String file_Path) throws IOException {
+    public static StringBuilder DownloadBinaryDV(UUID uuid, String URL, String USER, String PASSWORD, String file_Path) throws IOException {
         Connection connection = null;
         Statement statement = null;
         StringBuilder pathFiles = new StringBuilder();
@@ -209,6 +213,7 @@ public class MSSQLConnection {
             logger.error("Error walking directory: " + path + " ", e);
         }
     }
+
     private static boolean isValidFileName(String fileName) {
         if (fileName == null || fileName.trim().isEmpty()) {
             return false;
@@ -251,5 +256,20 @@ public class MSSQLConnection {
         }
 
         return cleaned;
+    }
+
+    public static ResultSet getStatisticSizeTable(String fileGroupName, String mssqlURL, String mssqlUser, String mssqlPassword) throws ClassNotFoundException, SQLException {
+        Class.forName("com.microsoft.sqlserver.jdbc.SQLServerDriver");
+        Connection connection = DriverManager.getConnection(mssqlURL, mssqlUser, mssqlPassword);
+        Statement statement = connection.createStatement();
+        StringBuilder getStatisticSizeTableSQL = new StringBuilder("SELECT OBJECT_NAME(p.object_id) AS TableName, fg.name AS FileGroupName, SUM(a.total_pages) * 8 / 1024 AS TotalSizeMB, SUM(a.used_pages) * 8 / 1024 AS UsedSizeMB, (SUM(a.total_pages) - SUM(a.used_pages)) * 8 / 1024 AS FreeSizeMB, FORMAT(getdate(),'dd-MM-yyy') as DataSize FROM sys.partitions p INNER JOIN sys.allocation_units a ON p.partition_id = a.container_id INNER JOIN sys.filegroups fg ON a.data_space_id = fg.data_space_id WHERE p.object_id IN (SELECT object_id FROM sys.tables WHERE is_ms_shipped = 0) ");
+
+        if (!Objects.equals(fileGroupName, "")) {
+            getStatisticSizeTableSQL.append("AND fg.name = '").append(fileGroupName).append("' ");
+        }
+        getStatisticSizeTableSQL.append("GROUP BY OBJECT_NAME(p.object_id), fg.name ORDER BY UsedSizeMB DESC;");
+
+        String selectSQL = getStatisticSizeTableSQL.toString();
+        return statement.executeQuery(selectSQL);
     }
 }
