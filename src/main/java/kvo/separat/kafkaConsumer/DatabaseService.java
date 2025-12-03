@@ -7,7 +7,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
-import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -38,14 +37,15 @@ public class DatabaseService {
         return DriverManager.getConnection(dbUrl, user, password);
     }
 
-    public static void setStatisticSizeTable(String fileGroupName) throws ClassNotFoundException, SQLException {
+    public static void setStatisticSizeTable(String fileGroupName) throws ClassNotFoundException {
         try {
             ResultSet resultSet;
             resultSet = MSSQLConnection.getStatisticSizeTable(fileGroupName, mssqlUrl, mssqlUser, mssqlPassword);
-
-            String setStatisticSizeTableSQL;
             Connection connection = DriverManager.getConnection(dbUrl, user, password);
-            setStatisticSizeTableSQL = "INSERT INTO table_sizes (TableName, FileGroupName, TotalSizeMB, UsedSizeMB, FreeSizeMB, DataSize) SELECT TABLE_NAME AS TableName, 'PRIMARY' AS FileGroupName, ROUND((data_length + index_length) / 1024 / 1024, 2) AS TotalSizeMB, ROUND(data_length / 1024 / 1024, 2) AS UsedSizeMB, ROUND(index_length / 1024 / 1024, 2) AS FreeSizeMB, DATE_FORMAT(NOW(), '%d-%m-%Y') AS DataSize FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY UsedSizeMB DESC;";
+            deleteStatisticPeriodDay(connection,"7");
+
+            String setStatisticSizeTableSQL = "INSERT INTO table_sizes (TableName, FileGroupName, TotalSizeMB, UsedSizeMB, FreeSizeMB, DataSize) SELECT TABLE_NAME AS TableName, 'PRIMARY' AS FileGroupName, ROUND((data_length + index_length) / 1024 / 1024, 2) AS TotalSizeMB, ROUND(data_length / 1024 / 1024, 2) AS UsedSizeMB, ROUND(index_length / 1024 / 1024, 2) AS FreeSizeMB, DATE_FORMAT(NOW(), '%d-%m-%Y') AS DataSize FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE' ORDER BY UsedSizeMB DESC;";
+
             PreparedStatement insertStmt = connection.prepareStatement(setStatisticSizeTableSQL);
             LocalDate currentDate = LocalDate.now();
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy");
@@ -64,7 +64,6 @@ public class DatabaseService {
             if (Objects.equals(dMax, null)) {
                 dMax = "01-01-1900";
             }
-            ;
             //Обновить новыми данными
             while (resultSet != null && resultSet.next()) {
                 String tableName = resultSet.getString("TableName");
@@ -86,6 +85,12 @@ public class DatabaseService {
         } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    private static void deleteStatisticPeriodDay(Connection connection, String days) throws SQLException {
+        String delStatisticSizeTableSQL = "delete FROM table_sizes WHERE STR_TO_DATE(DataSize, '%d-%m-%Y') IS NOT NULL AND STR_TO_DATE(DataSize, '%d-%m-%Y') + INTERVAL " + days + " DAY <= CURDATE() LIMIT 5000;";
+        PreparedStatement insertStmtDel = connection.prepareStatement(delStatisticSizeTableSQL);
+        insertStmtDel.executeUpdate();
     }
 
     private static void printResultSet(ResultSet resultSet, boolean columnName) throws SQLException {
